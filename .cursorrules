@@ -19,7 +19,14 @@ Ce fichier contient toutes les règles et standards de code du projet, incluant 
 1. **Avant d'écrire du code** : Lire la section pertinente de `CODING_STANDARDS.md`
 2. **Pendant le développement** : Respecter les principes CUPID et Clean Code
 3. **Après le code** : Écrire les tests unitaires correspondants (OBLIGATOIRE)
-4. **Avant commit** : Vérifier que tous les tests passent et que la couverture est >= 80%
+4. **Après modification de fichiers Markdown** : Lancer markdownlint et corriger toutes les erreurs détectées (OBLIGATOIRE)
+5. **Avant commit** : Vérifier que tous les tests passent et que la couverture est >= 80%
+
+## Vérification Markdown
+
+**TOUJOURS lancer markdownlint après toute modification d'un fichier Markdown** (`.md`, `README.md`, etc.) et corriger toutes les erreurs détectées.
+
+Si une règle de markdownlint semble inappropriée pour le projet (par exemple, une règle qui entre en conflit avec les standards du projet ou qui génère trop de faux positifs), proposer à l'utilisateur d'ajouter une modification ou une désactivation de cette règle dans `.markdownlint.json`.
 
 ## Références
 

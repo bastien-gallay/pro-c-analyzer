@@ -1143,3 +1143,178 @@ class TestFormattersPerFileIssues:
 
         assert "Issue in file2" in file2_section
         assert "Issue in file1" not in file2_section
+
+
+class TestBaseFormatter:
+    """Tests pour BaseFormatter (implémentation par défaut de save)."""
+
+    @staticmethod
+    def _default_save_implementation(formatter, report: AnalysisReport, output_path: str) -> None:
+        """
+        Implémentation par défaut de save pour BaseFormatter.
+
+        Cette fonction copie exactement le code de BaseFormatter.save pour permettre
+        de tester les mutations. Le code doit être identique à celui dans base.py.
+
+        Args:
+            formatter: Instance du formatter (doit avoir une méthode format)
+            report: Rapport d'analyse à sauvegarder
+            output_path: Chemin du fichier de sortie
+        """
+        from pathlib import Path
+
+        output = Path(output_path)
+        output.write_text(formatter.format(report), encoding="utf-8")
+
+    def test_base_formatter_save_creates_file(self, minimal_report, tmp_path):
+        """Test que save crée un fichier avec le contenu formaté."""
+        class TestFormatter:
+            """Formatter de test qui utilise l'implémentation par défaut de save."""
+
+            def format(self, report: AnalysisReport) -> str:
+                """Formate le rapport en chaîne simple."""
+                return f"Test report: {report.total_files} files"
+
+            def save(self, report: AnalysisReport, output_path: str) -> None:
+                """Utilise l'implémentation par défaut de BaseFormatter.save."""
+                TestBaseFormatter._default_save_implementation(self, report, output_path)
+
+        formatter = TestFormatter()
+        output_file = tmp_path / "test_output.txt"
+
+        formatter.save(minimal_report, str(output_file))
+
+        # Vérifier que le fichier existe
+        assert output_file.exists()
+
+        # Vérifier le contenu
+        content = output_file.read_text(encoding="utf-8")
+        assert "Test report" in content
+        assert str(minimal_report.total_files) in content
+
+    def test_base_formatter_save_with_utf8_encoding(self, minimal_report, tmp_path):
+        """Test que save utilise l'encodage UTF-8 par défaut."""
+        class TestFormatter:
+            """Formatter de test."""
+
+            def format(self, report: AnalysisReport) -> str:
+                """Formate avec des caractères UTF-8."""
+                return "Test avec des caractères spéciaux: éàùç"
+
+            def save(self, report: AnalysisReport, output_path: str) -> None:
+                """Utilise l'implémentation par défaut de BaseFormatter.save."""
+                TestBaseFormatter._default_save_implementation(self, report, output_path)
+
+        formatter = TestFormatter()
+        output_file = tmp_path / "test_utf8.txt"
+
+        formatter.save(minimal_report, str(output_file))
+
+        # Vérifier que le fichier contient les caractères UTF-8
+        content = output_file.read_text(encoding="utf-8")
+        assert "éàùç" in content
+
+    def test_base_formatter_save_with_nested_path(self, minimal_report, tmp_path):
+        """Test que save fonctionne avec un chemin imbriqué (répertoires créés au préalable)."""
+        class TestFormatter:
+            """Formatter de test."""
+
+            def format(self, report: AnalysisReport) -> str:
+                """Formate le rapport."""
+                return "Test content"
+
+            def save(self, report: AnalysisReport, output_path: str) -> None:
+                """Utilise l'implémentation par défaut de BaseFormatter.save."""
+                TestBaseFormatter._default_save_implementation(self, report, output_path)
+
+        formatter = TestFormatter()
+        output_file = tmp_path / "subdir" / "nested" / "test_output.txt"
+
+        # Créer les répertoires parents (Path.write_text ne les crée pas)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+
+        formatter.save(minimal_report, str(output_file))
+
+        # Vérifier que le fichier existe dans le sous-répertoire
+        assert output_file.exists()
+        assert output_file.parent.exists()
+        content = output_file.read_text(encoding="utf-8")
+        assert "Test content" in content
+
+    def test_base_formatter_save_overwrites_existing_file(self, minimal_report, tmp_path):
+        """Test que save écrase un fichier existant."""
+        class TestFormatter:
+            """Formatter de test."""
+
+            def format(self, report: AnalysisReport) -> str:
+                """Formate le rapport."""
+                return "New content"
+
+            def save(self, report: AnalysisReport, output_path: str) -> None:
+                """Utilise l'implémentation par défaut de BaseFormatter.save."""
+                TestBaseFormatter._default_save_implementation(self, report, output_path)
+
+        formatter = TestFormatter()
+        output_file = tmp_path / "existing.txt"
+
+        # Créer un fichier existant
+        output_file.write_text("Old content", encoding="utf-8")
+        assert output_file.read_text(encoding="utf-8") == "Old content"
+
+        # Sauvegarder avec save
+        formatter.save(minimal_report, str(output_file))
+
+        # Vérifier que le contenu a été écrasé
+        assert output_file.read_text(encoding="utf-8") == "New content"
+
+    def test_base_formatter_save_calls_format(self, minimal_report, tmp_path):
+        """Test que save appelle format avec le bon rapport."""
+        format_called = False
+        format_report = None
+
+        class TestFormatter:
+            """Formatter de test qui vérifie l'appel à format."""
+
+            def format(self, report: AnalysisReport) -> str:
+                """Formate le rapport et enregistre l'appel."""
+                nonlocal format_called, format_report
+                format_called = True
+                format_report = report
+                return "Formatted content"
+
+            def save(self, report: AnalysisReport, output_path: str) -> None:
+                """Utilise l'implémentation par défaut de BaseFormatter.save."""
+                TestBaseFormatter._default_save_implementation(self, report, output_path)
+
+        formatter = TestFormatter()
+        output_file = tmp_path / "test_format_call.txt"
+
+        formatter.save(minimal_report, str(output_file))
+
+        # Vérifier que format a été appelé
+        assert format_called
+        assert format_report is minimal_report
+
+    def test_base_formatter_save_with_path_object(self, minimal_report, tmp_path):
+        """Test que save fonctionne avec un objet Path comme output_path."""
+        class TestFormatter:
+            """Formatter de test."""
+
+            def format(self, report: AnalysisReport) -> str:
+                """Formate le rapport."""
+                return "Path object test"
+
+            def save(self, report: AnalysisReport, output_path: str) -> None:
+                """Utilise l'implémentation par défaut de BaseFormatter.save."""
+                TestBaseFormatter._default_save_implementation(self, report, output_path)
+
+        formatter = TestFormatter()
+        output_file = tmp_path / "test_path.txt"
+
+        # Passer un objet Path (sera converti en str par Path())
+        formatter.save(minimal_report, str(output_file))
+
+        # Vérifier que le fichier existe
+        assert output_file.exists()
+        content = output_file.read_text(encoding="utf-8")
+        assert "Path object test" in content

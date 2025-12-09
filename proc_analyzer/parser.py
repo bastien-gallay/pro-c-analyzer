@@ -3,6 +3,7 @@ Parser C utilisant tree-sitter
 Construit un AST à partir du code C prétraité
 """
 
+import re
 from dataclasses import dataclass, field
 from typing import List, Optional, Iterator
 import tree_sitter_c as tsc
@@ -76,14 +77,27 @@ class ProCParser:
         """
         Extrait toutes les définitions de fonctions.
         
+        Détecte à la fois les fonctions C standard (via tree-sitter)
+        et les fonctions avec syntaxe non-standard (VOID ...() avec begin/end).
+        
         Returns:
             Liste des fonctions trouvées
         """
-        if not self._tree:
-            return []
-        
         functions = []
-        self._find_functions(self._tree.root_node, functions)
+        
+        # Détecter les fonctions C standard via tree-sitter
+        if self._tree:
+            self._find_functions(self._tree.root_node, functions)
+        
+        # Détecter les fonctions avec syntaxe non-standard (VOID ...() begin/end)
+        if self._source:
+            alt_functions = self._find_alternative_functions(self._source)
+            # Éviter les doublons (si une fonction a été détectée par tree-sitter)
+            existing_names = {f.name for f in functions}
+            for alt_func in alt_functions:
+                if alt_func.name not in existing_names:
+                    functions.append(alt_func)
+        
         return functions
     
     def _find_functions(self, node: Node, functions: List[FunctionInfo]) -> None:
@@ -238,6 +252,100 @@ class ProCParser:
         if not self._source:
             return 0
         return sum(1 for line in self._source.split('\n') if line.strip())
+    
+    def _find_alternative_functions(self, source: str) -> List[FunctionInfo]:
+        """
+        Détecte les fonctions avec syntaxe non-standard.
+        
+        Recherche les patterns comme:
+        - VOID fonction_name()
+        - VOID fonction_name( param )
+        - INT fonction_name()
+        etc. suivis de 'begin' et se terminant par 'end'
+        
+        Args:
+            source: Code source à analyser
+            
+        Returns:
+            Liste des fonctions détectées
+        """
+        functions = []
+        lines = source.split('\n')
+        
+        # Pattern pour détecter les déclarations de fonctions non-standard
+        # Exemples: VOID fonction(), INT fonction(), STR fonction(INT param)
+        # On cherche: TYPE nom( ... ) suivi de begin
+        func_pattern = re.compile(
+            r'^\s*([A-Z_][A-Z0-9_]*)\s+(\w+)\s*\([^)]*\)',
+            re.IGNORECASE
+        )
+        
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            match = func_pattern.match(line)
+            
+            if match:
+                return_type = match.group(1).upper()
+                func_name = match.group(2)
+                start_line = i + 1  # 1-indexed
+                
+                # Chercher le 'begin' correspondant (peut être sur la même ligne ou suivante)
+                begin_line = i
+                found_begin = False
+                
+                # Chercher 'begin' dans les lignes suivantes (max 5 lignes)
+                for j in range(i, min(i + 5, len(lines))):
+                    if re.search(r'\bbegin\b', lines[j], re.IGNORECASE):
+                        begin_line = j
+                        found_begin = True
+                        break
+                
+                if found_begin:
+                    # Chercher le 'end' correspondant
+                    end_line = None
+                    depth = 1  # On compte les begin/end imbriqués
+                    
+                    for j in range(begin_line + 1, len(lines)):
+                        line_text = lines[j]
+                        # Compter les begin/end pour gérer l'imbrication
+                        begin_count = len(re.findall(r'\bbegin\b', line_text, re.IGNORECASE))
+                        end_count = len(re.findall(r'\bend\b', line_text, re.IGNORECASE))
+                        
+                        depth += begin_count - end_count
+                        
+                        if depth == 0:
+                            end_line = j
+                            break
+                    
+                    if end_line is not None:
+                        # Extraire les paramètres de la déclaration
+                        params = []
+                        param_match = re.search(r'\(([^)]*)\)', line)
+                        if param_match:
+                            param_str = param_match.group(1).strip()
+                            if param_str:
+                                # Extraire les noms de paramètres (format: TYPE nom, TYPE nom)
+                                param_parts = re.findall(r'([A-Z_][A-Z0-9_]*)\s+(\w+)', param_str, re.IGNORECASE)
+                                params = [name for _, name in param_parts]
+                        
+                        # Créer un FunctionInfo (sans node AST car c'est une fonction non-standard)
+                        # On crée un nœud factice pour compatibilité
+                        func_info = FunctionInfo(
+                            name=func_name,
+                            start_line=start_line,
+                            end_line=end_line + 1,  # 1-indexed
+                            node=None,  # Pas de nœud AST pour ces fonctions
+                            parameters=params,
+                            return_type=return_type.lower() if return_type != 'VOID' else 'void'
+                        )
+                        functions.append(func_info)
+                        i = end_line + 1
+                        continue
+            
+            i += 1
+        
+        return functions
 
 
 def parse_source(source: str) -> ProCParser:

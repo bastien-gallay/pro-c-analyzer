@@ -54,6 +54,12 @@ class CyclomaticCalculator:
         
         complexity = 1  # Base: un chemin minimum
         
+        # Si la fonction n'a pas de nœud AST (syntaxe non-standard), 
+        # on retourne la complexité de base
+        if function.node is None:
+            self._cache[function.name] = complexity
+            return complexity
+        
         # Compter les nœuds de branchement
         for node in self.parser.walk(function.node):
             if node.type in self.BRANCHING_NODES:
@@ -111,6 +117,11 @@ class CyclomaticCalculator:
             'logical_and_count': 0,
             'logical_or_count': 0,
         }
+        
+        # Si la fonction n'a pas de nœud AST, retourner les détails vides
+        if function.node is None:
+            details['total'] = self.calculate(function)
+            return details
         
         for node in self.parser.walk(function.node):
             if node.type == 'if_statement':

@@ -321,3 +321,26 @@ int check(int x) {
         functions = parser.get_functions()
         complexity = calculate_cyclomatic(parser, functions[0])
         assert complexity == 2
+
+    def test_calculate_function_without_node(self):
+        """Test que les fonctions sans nœud AST retournent une complexité de base."""
+        from proc_analyzer.parser import FunctionInfo
+        
+        parser = ProCParser()
+        parser.parse("")  # Parser vide
+        
+        # Créer une fonction sans nœud AST (syntaxe non-standard)
+        func = FunctionInfo(
+            name="test_func",
+            start_line=1,
+            end_line=5,
+            node=None,  # Pas de nœud AST
+            parameters=[],
+            return_type="void"
+        )
+        
+        calc = CyclomaticCalculator(parser)
+        complexity = calc.calculate(func)
+        
+        # Doit retourner la complexité de base (1)
+        assert complexity == 1

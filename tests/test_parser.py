@@ -250,3 +250,210 @@ int add(int a, int b) {
         functions = parser.get_functions()
         assert len(functions) == 1
         assert functions[0].name == "add"
+
+
+class TestAlternativeFunctionSyntax:
+    """Tests pour la détection de fonctions avec syntaxe non-standard (VOID ...() begin/end)."""
+
+    def test_parse_void_function_with_begin_end(self):
+        """Test de parsing d'une fonction VOID avec begin/end."""
+        source = """
+VOID test_function()
+begin
+    int x = 10;
+    return;
+end
+"""
+        parser = ProCParser()
+        parser.parse(source)
+
+        functions = parser.get_functions()
+        assert len(functions) == 1
+        assert functions[0].name == "test_function"
+        assert functions[0].return_type == "void"
+        assert functions[0].node is None  # Pas de nœud AST pour syntaxe non-standard
+        assert functions[0].start_line == 2
+        assert functions[0].end_line == 6
+
+    def test_parse_multiple_void_functions(self):
+        """Test de parsing de plusieurs fonctions VOID."""
+        source = """
+VOID func1()
+begin
+    return;
+end
+
+VOID func2()
+begin
+    int x = 1;
+end
+
+INT func3()
+begin
+    return 0;
+end
+"""
+        parser = ProCParser()
+        parser.parse(source)
+
+        functions = parser.get_functions()
+        assert len(functions) == 3
+
+        names = [f.name for f in functions]
+        assert "func1" in names
+        assert "func2" in names
+        assert "func3" in names
+
+        # Vérifier les types de retour
+        func_dict = {f.name: f for f in functions}
+        assert func_dict["func1"].return_type == "void"
+        assert func_dict["func2"].return_type == "void"
+        assert func_dict["func3"].return_type == "int"
+
+    def test_parse_void_function_with_parameters(self):
+        """Test de parsing d'une fonction VOID avec paramètres."""
+        source = """
+VOID process_data(INT param1, STR param2)
+begin
+    int x = param1;
+end
+"""
+        parser = ProCParser()
+        parser.parse(source)
+
+        functions = parser.get_functions()
+        assert len(functions) == 1
+
+        func = functions[0]
+        assert func.name == "process_data"
+        assert "param1" in func.parameters
+        assert "param2" in func.parameters
+
+    def test_parse_void_function_nested_begin_end(self):
+        """Test de parsing avec begin/end imbriqués."""
+        source = """
+VOID complex_function()
+begin
+    if (1) then
+    begin
+        int x = 1;
+    end
+    int y = 2;
+end
+"""
+        parser = ProCParser()
+        parser.parse(source)
+
+        functions = parser.get_functions()
+        assert len(functions) == 1
+
+        func = functions[0]
+        assert func.name == "complex_function"
+        # Le end final doit être détecté correctement malgré l'imbrication
+        assert func.end_line == 8
+
+    def test_parse_mixed_standard_and_alternative_syntax(self):
+        """Test de parsing avec fonctions standard et non-standard."""
+        source = """
+int standard_func(void) {
+    return 0;
+}
+
+VOID alternative_func()
+begin
+    int x = 1;
+end
+"""
+        parser = ProCParser()
+        parser.parse(source)
+
+        functions = parser.get_functions()
+        assert len(functions) == 2
+
+        names = [f.name for f in functions]
+        assert "standard_func" in names
+        assert "alternative_func" in names
+
+        # Vérifier que les fonctions standard ont un node, les autres non
+        func_dict = {f.name: f for f in functions}
+        assert func_dict["standard_func"].node is not None
+        assert func_dict["alternative_func"].node is None
+
+    def test_parse_void_function_begin_on_same_line(self):
+        """Test de parsing avec begin sur la même ligne que la déclaration."""
+        source = """
+VOID inline_func() begin
+    int x = 1;
+end
+"""
+        parser = ProCParser()
+        parser.parse(source)
+
+        functions = parser.get_functions()
+        assert len(functions) == 1
+        assert functions[0].name == "inline_func"
+
+    def test_parse_void_function_with_void_parameter(self):
+        """Test de parsing avec paramètre VOID."""
+        source = """
+VOID func_with_void(VOID)
+begin
+    return;
+end
+"""
+        parser = ProCParser()
+        parser.parse(source)
+
+        functions = parser.get_functions()
+        assert len(functions) == 1
+        assert functions[0].name == "func_with_void"
+        # VOID dans les paramètres ne doit pas être extrait comme paramètre
+        assert len(functions[0].parameters) == 0
+
+    def test_parse_void_function_no_begin_found(self):
+        """Test qu'une déclaration sans begin n'est pas détectée."""
+        source = """
+VOID incomplete_func()
+    int x = 1;
+"""
+        parser = ProCParser()
+        parser.parse(source)
+
+        functions = parser.get_functions()
+        # Ne doit pas détecter de fonction car pas de begin
+        assert len(functions) == 0
+
+    def test_parse_void_function_no_end_found(self):
+        """Test qu'une fonction sans end correspondant n'est pas détectée."""
+        source = """
+VOID incomplete_func()
+begin
+    int x = 1;
+    // Pas de end
+"""
+        parser = ProCParser()
+        parser.parse(source)
+
+        functions = parser.get_functions()
+        # Ne doit pas détecter de fonction car pas de end correspondant
+        assert len(functions) == 0
+
+    def test_parse_void_function_line_numbers(self):
+        """Test que les numéros de ligne sont corrects."""
+        source = """
+VOID test_func()
+begin
+    int x = 1;
+    int y = 2;
+end
+"""
+        parser = ProCParser()
+        parser.parse(source)
+
+        functions = parser.get_functions()
+        assert len(functions) == 1
+
+        func = functions[0]
+        assert func.start_line == 2  # Ligne de la déclaration
+        assert func.end_line == 6    # Ligne du end
+        assert func.line_count == 5   # 2 à 6 inclus

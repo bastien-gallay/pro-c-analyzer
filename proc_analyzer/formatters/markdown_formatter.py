@@ -127,6 +127,85 @@ class MarkdownFormatter:
                     f"{cogn_badge} {func.cognitive_complexity} | {func.sql_blocks_count} |"
                 )
         
+        # TODOs pour ce fichier
+        if metrics.todos:
+            parts.append('\n#### 📝 TODO/FIXME\n')
+            
+            # Grouper par priorité
+            by_priority = {'high': [], 'medium': [], 'low': []}
+            for todo in metrics.todos:
+                priority = todo.get('priority', 'low')
+                by_priority[priority].append(todo)
+            
+            for priority in ['high', 'medium', 'low']:
+                items = by_priority[priority]
+                if not items:
+                    continue
+                
+                emoji = {'high': '🔴', 'medium': '🟡', 'low': '⚪'}[priority]
+                parts.append(f'\n**{emoji} {priority.upper()} ({len(items)})**\n')
+                
+                for todo in items[:10]:  # Limiter à 10 par priorité
+                    tag = todo.get('tag', 'TODO')
+                    msg = todo.get('message', '').replace('|', '\\|')
+                    line = todo.get('line_number', 0)
+                    
+                    parts.append(f"- **{tag}** `L{line}` - {msg}")
+                
+                if len(items) > 10:
+                    parts.append(f"*... et {len(items) - 10} autres*")
+        
+        # Problèmes de curseurs pour ce fichier
+        if metrics.cursor_analysis and metrics.cursor_analysis.get('issues'):
+            issues = metrics.cursor_analysis['issues']
+            if issues:
+                parts.append('\n#### 🔄 Problèmes de curseurs SQL\n')
+                
+                for issue in issues[:15]:  # Limiter à 15
+                    severity = issue.get('severity', 'info')
+                    cursor = issue.get('cursor_name', '?').replace('|', '\\|')
+                    line = issue.get('line_number', 0)
+                    msg = issue.get('message', '').replace('|', '\\|')
+                    
+                    emoji = {'error': '🔴', 'warning': '🟡', 'info': '🔵'}.get(severity, '⚪')
+                    parts.append(f"- {emoji} **{severity.upper()}** `L{line}`")
+                    parts.append(f"  - Curseur: `{cursor}` - {msg}")
+                
+                if len(issues) > 15:
+                    parts.append(f"*... et {len(issues) - 15} autres problèmes*")
+        
+        # Problèmes mémoire pour ce fichier
+        if metrics.memory_analysis and metrics.memory_analysis.get('issues'):
+            issues = metrics.memory_analysis['issues']
+            if issues:
+                parts.append('\n#### 🧠 Problèmes de gestion mémoire\n')
+                
+                # Grouper par sévérité
+                by_severity = {'critical': [], 'error': [], 'warning': [], 'info': []}
+                for issue in issues:
+                    severity = issue.get('severity', 'info')
+                    by_severity[severity].append(issue)
+                
+                for severity in ['critical', 'error', 'warning']:
+                    items = by_severity[severity]
+                    if not items:
+                        continue
+                    
+                    emoji = {'critical': '🔴', 'error': '🔴', 'warning': '🟡'}[severity]
+                    parts.append(f'\n**{emoji} {severity.upper()} ({len(items)})**\n')
+                    
+                    for issue in items[:10]:  # Limiter à 10 par sévérité
+                        line = issue.get('line_number', 0)
+                        msg = issue.get('message', '').replace('|', '\\|')
+                        rec = issue.get('recommendation', '').replace('|', '\\|')
+                        
+                        parts.append(f"- `L{line}` - {msg}")
+                        if rec:
+                            parts.append(f"  - → {rec}")
+                    
+                    if len(items) > 10:
+                        parts.append(f"*... et {len(items) - 10} autres*")
+        
         return '\n'.join(parts)
     
     def _markdown_todos(self, report: AnalysisReport) -> str:

@@ -388,3 +388,26 @@ int check(int x, int y) {
         complexity = calculate_cognitive(parser, functions[0])
         # Outer if: 1, inner if: 1 + 1 = 3
         assert complexity == 3
+
+    def test_calculate_function_without_node(self):
+        """Test que les fonctions sans nœud AST retournent une complexité de 0."""
+        from proc_analyzer.parser import FunctionInfo
+        
+        parser = ProCParser()
+        parser.parse("")  # Parser vide
+        
+        # Créer une fonction sans nœud AST (syntaxe non-standard)
+        func = FunctionInfo(
+            name="test_func",
+            start_line=1,
+            end_line=5,
+            node=None,  # Pas de nœud AST
+            parameters=[],
+            return_type="void"
+        )
+        
+        calc = CognitiveCalculator(parser)
+        complexity = calc.calculate(func)
+        
+        # Doit retourner 0 (pas de complexité calculable sans AST)
+        assert complexity == 0

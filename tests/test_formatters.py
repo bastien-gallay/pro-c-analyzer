@@ -398,3 +398,285 @@ class TestFormattersIntegration:
         md_formatter = MarkdownFormatter()
         md_output = md_formatter.format(minimal_report)
         assert str(num_files) in md_output
+
+
+class TestFormattersPerFileIssues:
+    """Tests pour vérifier que les TODO/bugs/warnings sont affichés par fichier."""
+
+    def test_html_formatter_todos_in_file_section(self):
+        """Test que les TODOs sont affichés dans la section de chaque fichier en HTML."""
+        file_metrics = FileMetrics(
+            filepath="test.pc",
+            total_lines=50,
+            non_empty_lines=40,
+            functions=[],
+            todos=[
+                {
+                    'tag': 'TODO',
+                    'message': 'Fix this issue',
+                    'priority': 'high',
+                    'line_number': 10,
+                },
+                {
+                    'tag': 'FIXME',
+                    'message': 'Critical bug',
+                    'priority': 'high',
+                    'line_number': 20,
+                },
+                {
+                    'tag': 'NOTE',
+                    'message': 'Minor note',
+                    'priority': 'low',
+                    'line_number': 30,
+                },
+            ],
+        )
+        
+        report = AnalysisReport(files=[file_metrics])
+        formatter = HTMLFormatter()
+        output = formatter.format(report)
+        
+        # Vérifier que les TODOs sont dans la section du fichier
+        # La section du fichier doit contenir le nom du fichier
+        file_section_start = output.find("test.pc")
+        assert file_section_start != -1
+        
+        # Les TODOs doivent être après le nom du fichier dans sa section
+        file_section = output[file_section_start:]
+        
+        # Vérifier la présence des TODOs dans la section du fichier
+        assert "TODO/FIXME" in file_section
+        assert "Fix this issue" in file_section
+        assert "Critical bug" in file_section
+        assert "L10" in file_section or "10" in file_section
+        assert "L20" in file_section or "20" in file_section
+        
+        # Vérifier les badges de priorité
+        assert "HIGH" in file_section or "high" in file_section
+
+    def test_html_formatter_cursor_issues_in_file_section(self):
+        """Test que les problèmes de curseurs sont affichés dans la section de chaque fichier en HTML."""
+        file_metrics = FileMetrics(
+            filepath="test.pc",
+            total_lines=50,
+            non_empty_lines=40,
+            functions=[],
+            cursor_analysis={
+                'total_cursors': 2,
+                'total_issues': 1,
+                'issues': [
+                    {
+                        'severity': 'error',
+                        'cursor_name': 'emp_cursor',
+                        'message': 'Unclosed cursor',
+                        'line_number': 15,
+                    },
+                ],
+            },
+        )
+        
+        report = AnalysisReport(files=[file_metrics])
+        formatter = HTMLFormatter()
+        output = formatter.format(report)
+        
+        # Vérifier que les problèmes de curseurs sont dans la section du fichier
+        file_section_start = output.find("test.pc")
+        assert file_section_start != -1
+        
+        file_section = output[file_section_start:]
+        
+        # Vérifier la présence des problèmes de curseurs
+        assert "Problèmes de curseurs SQL" in file_section or "curseurs" in file_section.lower()
+        assert "Unclosed cursor" in file_section
+        assert "emp_cursor" in file_section
+        assert "L15" in file_section or "15" in file_section
+
+    def test_html_formatter_memory_issues_in_file_section(self):
+        """Test que les problèmes mémoire sont affichés dans la section de chaque fichier en HTML."""
+        file_metrics = FileMetrics(
+            filepath="test.pc",
+            total_lines=50,
+            non_empty_lines=40,
+            functions=[],
+            memory_analysis={
+                'total_issues': 2,
+                'critical_count': 1,
+                'issues': [
+                    {
+                        'severity': 'critical',
+                        'message': 'Memory leak detected',
+                        'line_number': 25,
+                        'recommendation': 'Add free() call',
+                    },
+                    {
+                        'severity': 'warning',
+                        'message': 'Dangerous function used',
+                        'line_number': 35,
+                    },
+                ],
+            },
+        )
+        
+        report = AnalysisReport(files=[file_metrics])
+        formatter = HTMLFormatter()
+        output = formatter.format(report)
+        
+        # Vérifier que les problèmes mémoire sont dans la section du fichier
+        file_section_start = output.find("test.pc")
+        assert file_section_start != -1
+        
+        file_section = output[file_section_start:]
+        
+        # Vérifier la présence des problèmes mémoire
+        assert "Problèmes de gestion mémoire" in file_section or "mémoire" in file_section.lower()
+        assert "Memory leak detected" in file_section
+        assert "Add free() call" in file_section
+        assert "L25" in file_section or "25" in file_section
+
+    def test_markdown_formatter_todos_in_file_section(self):
+        """Test que les TODOs sont affichés dans la section de chaque fichier en Markdown."""
+        file_metrics = FileMetrics(
+            filepath="test.pc",
+            total_lines=50,
+            non_empty_lines=40,
+            functions=[],
+            todos=[
+                {
+                    'tag': 'TODO',
+                    'message': 'Fix this issue',
+                    'priority': 'high',
+                    'line_number': 10,
+                },
+                {
+                    'tag': 'FIXME',
+                    'message': 'Critical bug',
+                    'priority': 'medium',
+                    'line_number': 20,
+                },
+            ],
+        )
+        
+        report = AnalysisReport(files=[file_metrics])
+        formatter = MarkdownFormatter()
+        output = formatter.format(report)
+        
+        # Trouver la section du fichier
+        file_section_start = output.find("test.pc")
+        assert file_section_start != -1
+        
+        file_section = output[file_section_start:]
+        
+        # Vérifier la présence des TODOs dans la section du fichier
+        assert "TODO/FIXME" in file_section or "TODO" in file_section
+        assert "Fix this issue" in file_section
+        assert "Critical bug" in file_section
+        assert "L10" in file_section or "10" in file_section
+        assert "L20" in file_section or "20" in file_section
+
+    def test_markdown_formatter_cursor_issues_in_file_section(self):
+        """Test que les problèmes de curseurs sont affichés dans la section de chaque fichier en Markdown."""
+        file_metrics = FileMetrics(
+            filepath="test.pc",
+            total_lines=50,
+            non_empty_lines=40,
+            functions=[],
+            cursor_analysis={
+                'total_cursors': 1,
+                'total_issues': 1,
+                'issues': [
+                    {
+                        'severity': 'warning',
+                        'cursor_name': 'data_cursor',
+                        'message': 'Nested cursor detected',
+                        'line_number': 12,
+                    },
+                ],
+            },
+        )
+        
+        report = AnalysisReport(files=[file_metrics])
+        formatter = MarkdownFormatter()
+        output = formatter.format(report)
+        
+        # Vérifier que les problèmes de curseurs sont dans la section du fichier
+        file_section_start = output.find("test.pc")
+        assert file_section_start != -1
+        
+        file_section = output[file_section_start:]
+        
+        # Vérifier la présence des problèmes de curseurs
+        assert "curseurs" in file_section.lower() or "cursor" in file_section.lower()
+        assert "Nested cursor detected" in file_section
+        assert "data_cursor" in file_section
+        assert "L12" in file_section or "12" in file_section
+
+    def test_markdown_formatter_memory_issues_in_file_section(self):
+        """Test que les problèmes mémoire sont affichés dans la section de chaque fichier en Markdown."""
+        file_metrics = FileMetrics(
+            filepath="test.pc",
+            total_lines=50,
+            non_empty_lines=40,
+            functions=[],
+            memory_analysis={
+                'total_issues': 1,
+                'critical_count': 0,
+                'issues': [
+                    {
+                        'severity': 'error',
+                        'message': 'Missing NULL check',
+                        'line_number': 18,
+                        'recommendation': 'Add NULL check before use',
+                    },
+                ],
+            },
+        )
+        
+        report = AnalysisReport(files=[file_metrics])
+        formatter = MarkdownFormatter()
+        output = formatter.format(report)
+        
+        # Vérifier que les problèmes mémoire sont dans la section du fichier
+        file_section_start = output.find("test.pc")
+        assert file_section_start != -1
+        
+        file_section = output[file_section_start:]
+        
+        # Vérifier la présence des problèmes mémoire
+        assert "mémoire" in file_section.lower() or "memory" in file_section.lower()
+        assert "Missing NULL check" in file_section
+        assert "Add NULL check before use" in file_section
+        assert "L18" in file_section or "18" in file_section
+
+    def test_html_formatter_multiple_files_with_issues(self):
+        """Test que chaque fichier affiche ses propres issues en HTML."""
+        file1 = FileMetrics(
+            filepath="file1.pc",
+            total_lines=30,
+            non_empty_lines=25,
+            functions=[],
+            todos=[{'tag': 'TODO', 'message': 'Issue in file1', 'priority': 'high', 'line_number': 5}],
+        )
+        
+        file2 = FileMetrics(
+            filepath="file2.pc",
+            total_lines=40,
+            non_empty_lines=35,
+            functions=[],
+            todos=[{'tag': 'FIXME', 'message': 'Issue in file2', 'priority': 'medium', 'line_number': 10}],
+        )
+        
+        report = AnalysisReport(files=[file1, file2])
+        formatter = HTMLFormatter()
+        output = formatter.format(report)
+        
+        # Vérifier que chaque fichier a ses propres issues
+        file1_section_start = output.find("file1.pc")
+        file1_section_end = output.find("file2.pc")
+        file1_section = output[file1_section_start:file1_section_end]
+        
+        assert "Issue in file1" in file1_section
+        assert "Issue in file2" not in file1_section
+        
+        file2_section = output[file1_section_end:]
+        assert "Issue in file2" in file2_section
+        assert "Issue in file1" not in file2_section

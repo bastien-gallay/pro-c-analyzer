@@ -69,6 +69,12 @@ class CognitiveCalculator:
         
         complexity = 0
         
+        # Si la fonction n'a pas de nœud AST (syntaxe non-standard),
+        # on retourne 0 (pas de complexité calculable sans AST)
+        if function.node is None:
+            self._cache[function.name] = complexity
+            return complexity
+        
         # Trouver le corps de la fonction (compound_statement)
         body = self._find_function_body(function.node)
         if body:

@@ -185,6 +185,13 @@ class HalsteadCalculator:
             return self._cache[function.name]
         
         metrics = HalsteadMetrics()
+        
+        # Si la fonction n'a pas de nœud AST (syntaxe non-standard),
+        # on retourne des métriques vides
+        if function.node is None:
+            self._cache[function.name] = metrics
+            return metrics
+        
         operators_count: Dict[str, int] = {}
         operands_count: Dict[str, int] = {}
         

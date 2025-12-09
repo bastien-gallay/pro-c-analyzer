@@ -435,6 +435,96 @@ class HTMLFormatter:
             
             parts.append('</tbody></table>')
         
+        # TODOs pour ce fichier
+        if metrics.todos:
+            parts.append('<h3>📝 TODO/FIXME</h3>')
+            parts.append('<ul class="issue-list">')
+            
+            # Grouper par priorité
+            by_priority = {'high': [], 'medium': [], 'low': []}
+            for todo in metrics.todos:
+                priority = todo.get('priority', 'low')
+                by_priority[priority].append(todo)
+            
+            for priority in ['high', 'medium', 'low']:
+                items = by_priority[priority]
+                if not items:
+                    continue
+                
+                badge_class = f'badge-{priority}'
+                for todo in items:
+                    tag = todo.get('tag', 'TODO')
+                    msg = escape(todo.get('message', ''))
+                    line = todo.get('line_number', 0)
+                    
+                    parts.append('<li class="issue-item">')
+                    parts.append(f'<span class="badge {badge_class}">{priority.upper()}</span> ')
+                    parts.append(f'<strong>{tag}</strong> <span class="issue-location">L{line}</span><br>')
+                    parts.append(f'{msg}')
+                    parts.append('</li>')
+            
+            parts.append('</ul>')
+        
+        # Problèmes de curseurs pour ce fichier
+        if metrics.cursor_analysis and metrics.cursor_analysis.get('issues'):
+            issues = metrics.cursor_analysis['issues']
+            if issues:
+                parts.append('<h3>🔄 Problèmes de curseurs SQL</h3>')
+                parts.append('<ul class="issue-list">')
+                
+                for issue in issues[:20]:  # Limiter à 20
+                    severity = issue.get('severity', 'info')
+                    cursor = escape(issue.get('cursor_name', '?'))
+                    line = issue.get('line_number', 0)
+                    msg = escape(issue.get('message', ''))
+                    
+                    parts.append(f'<li class="issue-item {severity}">')
+                    parts.append(f'<strong>{severity.upper()}</strong> <span class="issue-location">L{line}</span><br>')
+                    parts.append(f'Curseur: <code>{cursor}</code> - {msg}')
+                    parts.append('</li>')
+                
+                if len(issues) > 20:
+                    parts.append(f'<li><em>... et {len(issues) - 20} autres problèmes</em></li>')
+                
+                parts.append('</ul>')
+        
+        # Problèmes mémoire pour ce fichier
+        if metrics.memory_analysis and metrics.memory_analysis.get('issues'):
+            issues = metrics.memory_analysis['issues']
+            if issues:
+                parts.append('<h3>🧠 Problèmes de gestion mémoire</h3>')
+                
+                # Grouper par sévérité
+                by_severity = {'critical': [], 'error': [], 'warning': [], 'info': []}
+                for issue in issues:
+                    severity = issue.get('severity', 'info')
+                    by_severity[severity].append(issue)
+                
+                for severity in ['critical', 'error', 'warning']:
+                    items = by_severity[severity]
+                    if not items:
+                        continue
+                    
+                    parts.append(f'<h4><span class="badge badge-{severity}">{severity.upper()}</span> ({len(items)})</h4>')
+                    parts.append('<ul class="issue-list">')
+                    
+                    for issue in items[:15]:  # Limiter à 15 par sévérité
+                        line = issue.get('line_number', 0)
+                        msg = escape(issue.get('message', ''))
+                        rec = escape(issue.get('recommendation', ''))
+                        
+                        parts.append(f'<li class="issue-item {severity}">')
+                        parts.append(f'<span class="issue-location">L{line}</span><br>')
+                        parts.append(f'{msg}')
+                        if rec:
+                            parts.append(f'<br><em>→ {rec}</em>')
+                        parts.append('</li>')
+                    
+                    if len(items) > 15:
+                        parts.append(f'<li><em>... et {len(items) - 15} autres</em></li>')
+                    
+                    parts.append('</ul>')
+        
         parts.extend(['</div>', '</div>'])
         return '\n'.join(parts)
     

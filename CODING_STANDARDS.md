@@ -742,6 +742,7 @@ class CognitiveCalculator:
 ### Séparation des préoccupations
 
 Séparer clairement :
+
 - **Parsing** : extraction de l'AST (`parser.py`)
 - **Calcul** : métriques (`cyclomatic.py`, `cognitive.py`, `halstead.py`)
 - **Analyse** : détection de problèmes (`memory.py`, `cursors.py`)
@@ -802,13 +803,28 @@ for func in self.parser.get_functions():
 
 ## Tests
 
+### ⚠️ RÈGLE OBLIGATOIRE : Tests requis
+
+**IMPORTANT : Toute nouvelle fonctionnalité, classe ou module DOIT être accompagné de tests unitaires.**
+
+- ❌ **Interdit** : Ajouter du code sans tests correspondants
+- ✅ **Obligatoire** : Pour chaque nouvelle fonctionnalité, créer ou mettre à jour les tests correspondants
+- ✅ **Validation** : Les tests doivent passer avant de considérer une fonctionnalité comme terminée
+
+**Workflow obligatoire :**
+
+1. Écrire le code de la fonctionnalité
+2. **Immédiatement après**, écrire les tests unitaires
+3. Vérifier que tous les tests passent (`pytest`)
+4. Vérifier la couverture (`pytest --cov`)
+
 ### Couverture de tests
 
 Viser une couverture de **80% minimum** pour le code de production. Les tests critiques (parsing, calculs) doivent être à **100%**.
 
 ### Tests unitaires
 
-Chaque module doit avoir ses tests unitaires correspondants.
+Chaque module doit avoir ses tests unitaires correspondants. **Les tests doivent être créés en même temps que le code, pas après.**
 
 **Structure :**
 
@@ -901,6 +917,16 @@ def tmp_proc_file(tmp_path, simple_proc_source):
     file.write_text(simple_proc_source)
     return file
 ```
+
+### Checklist avant commit
+
+Avant de considérer une fonctionnalité comme terminée, vérifier :
+
+- [ ] Tests unitaires créés pour toutes les nouvelles fonctions/classes
+- [ ] Tests d'intégration pour les nouveaux workflows
+- [ ] Tous les tests passent (`pytest`)
+- [ ] Couverture de code >= 80% (`pytest --cov`)
+- [ ] Aucun test existant n'a été cassé
 
 ---
 
@@ -1108,4 +1134,3 @@ Ces standards de code visent à maintenir la qualité, la maintenabilité et la 
 ---
 
 *Dernière mise à jour : 2024*
-

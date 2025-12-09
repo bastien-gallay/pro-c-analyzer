@@ -68,8 +68,22 @@ Pro*C source → ProCPreprocessor → clean C + SQL blocks list
 
 ## Testing
 
+**⚠️ RÈGLE OBLIGATOIRE :** Toute nouvelle fonctionnalité DOIT être accompagnée de tests unitaires. Voir `CODING_STANDARDS.md` section "Tests" pour les détails.
+
 Tests use pytest fixtures defined in `tests/conftest.py`. Key fixtures:
+
 - `simple_c_source`, `simple_proc_source`: Basic code samples
 - `complex_function_source`: Code with nested control flow for complexity testing
 - `cursor_source`, `memory_issues_source`, `todo_comments_source`: Specialized samples
 - `parser`, `parser_complex`: Pre-initialized parser instances
+
+## Standards de Code
+
+**TOUJOURS suivre `CODING_STANDARDS.md`** pour :
+
+- Architecture et organisation du code
+- Principes CUPID (Composable, Unix philosophy, Predictable, Idiomatic, Domain-based)
+- Clean Code (noms significatifs, fonctions courtes, etc.)
+- Typage (annotations complètes)
+- Tests obligatoires (section Tests)
+- Documentation (docstrings style Google)

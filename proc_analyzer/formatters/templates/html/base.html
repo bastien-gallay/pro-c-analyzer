@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pro*C Static Analyzer - Rapport d'analyse</title>
     <style>
-{{ css_content }}
+{{ css_content|safe }}
     </style>
 </head>
 <body>
@@ -20,7 +20,7 @@
         {% include 'memory_issues.html' %}
     </div>
     <script>
-{{ js_content }}
+{{ js_content|safe }}
     </script>
 </body>
 </html>

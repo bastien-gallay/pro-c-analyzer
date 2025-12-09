@@ -1,0 +1,27 @@
+# Règles de développement - Pro*C Analyzer
+
+## ⚠️ RÈGLE OBLIGATOIRE : Consulter CODING_STANDARDS.md
+
+**TOUJOURS consulter et suivre `CODING_STANDARDS.md` avant d'écrire ou modifier du code.**
+
+Ce fichier contient toutes les règles et standards de code du projet, incluant :
+
+- Principes CUPID (Composable, Unix philosophy, Predictable, Idiomatic, Domain-based)
+- Clean Code (noms significatifs, fonctions courtes, commentaires utiles)
+- Quatre règles de conception simple (Tests, DRY, Expressif, Minimal)
+- Typage et TypeGuard (annotations complètes obligatoires)
+- Architecture et organisation (modules focalisés, séparation des préoccupations)
+- **Tests obligatoires** : Toute nouvelle fonctionnalité DOIT être accompagnée de tests unitaires
+- Documentation (docstrings style Google)
+
+## Workflow obligatoire
+
+1. **Avant d'écrire du code** : Lire la section pertinente de `CODING_STANDARDS.md`
+2. **Pendant le développement** : Respecter les principes CUPID et Clean Code
+3. **Après le code** : Écrire les tests unitaires correspondants (OBLIGATOIRE)
+4. **Avant commit** : Vérifier que tous les tests passent et que la couverture est >= 80%
+
+## Références
+
+- `CODING_STANDARDS.md` : Standards de code complets
+- `CLAUDE.md` : Guide d'architecture et commandes du projet

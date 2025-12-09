@@ -27,6 +27,13 @@ uv run pytest tests/test_cyclomatic.py::test_cyclomatic_simple_function -v
 
 # Run tests with coverage
 uv run pytest --cov=proc_analyzer
+
+# Mutation testing with mutmut
+uv run mutmut run
+uv run mutmut results
+uv run mutmut show <id>
+uv run mutmut apply <id>
+uv run mutmut run --paths-to-mutate proc_analyzer/analyzer.py
 ```
 
 ## Architecture
@@ -76,6 +83,22 @@ Tests use pytest fixtures defined in `tests/conftest.py`. Key fixtures:
 - `complex_function_source`: Code with nested control flow for complexity testing
 - `cursor_source`, `memory_issues_source`, `todo_comments_source`: Specialized samples
 - `parser`, `parser_complex`: Pre-initialized parser instances
+
+### Mutation Testing
+
+The project uses **mutmut** to evaluate test quality by introducing mutations in the code and checking if tests detect them.
+
+**Commands:**
+
+- `uv run mutmut run`: Run all mutation tests
+- `uv run mutmut results`: Show summary of mutation test results
+- `uv run mutmut show <id>`: Show details of a specific surviving mutation
+- `uv run mutmut apply <id>`: Apply a mutation to the code for debugging
+- `uv run mutmut run --paths-to-mutate proc_analyzer/analyzer.py`: Run mutations on a specific module
+
+**Configuration:** Mutation testing is configured in `pyproject.toml` under `[tool.mutmut]`. It mutates code in `proc_analyzer/` and runs tests from `tests/`.
+
+**CI/CD:** Mutation testing runs automatically in GitHub Actions on the `quality.yml` workflow for main/master branches and pull requests. Results are uploaded as artifacts and the job has a 30-minute timeout.
 
 ## Standards de Code
 

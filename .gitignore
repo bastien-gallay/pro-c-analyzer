@@ -28,6 +28,8 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+.mutmut-cache/
+mutants/
 
 # Local dev
 *.log

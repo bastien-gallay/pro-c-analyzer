@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Set, Tuple
 from enum import Enum
 
+from .utils import get_line_number_from_position
+
 
 class CursorIssueType(Enum):
     """Types de problèmes de curseurs"""
@@ -151,7 +153,7 @@ class CursorAnalyzer:
         re.IGNORECASE
     )
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.result = CursorAnalysisResult()
         self._cursor_map: Dict[str, CursorInfo] = {}
         self._prepared_stmts: Set[str] = set()
@@ -187,9 +189,6 @@ class CursorAnalyzer:
         self.result.cursors = list(self._cursor_map.values())
         return self.result
     
-    def _get_line_number(self, source: str, pos: int) -> int:
-        """Convertit une position en numéro de ligne"""
-        return source[:pos].count('\n') + 1
     
     def _find_prepared_statements(self, source: str) -> None:
         """Trouve les statements préparés"""
@@ -203,7 +202,7 @@ class CursorAnalyzer:
         for match in self.DECLARE_CURSOR.finditer(source):
             cursor_name = match.group(1).lower()
             select_stmt = match.group(2).strip()
-            line_num = self._get_line_number(source, match.start())
+            line_num = get_line_number_from_position(source, match.start())
             
             cursor = CursorInfo(
                 name=cursor_name,
@@ -217,7 +216,7 @@ class CursorAnalyzer:
         for match in self.DECLARE_DYNAMIC.finditer(source):
             cursor_name = match.group(1).lower()
             stmt_name = match.group(2).lower()
-            line_num = self._get_line_number(source, match.start())
+            line_num = get_line_number_from_position(source, match.start())
             
             if stmt_name in self._prepared_stmts:
                 cursor = CursorInfo(
@@ -232,7 +231,7 @@ class CursorAnalyzer:
         # OPEN
         for match in self.OPEN_CURSOR.finditer(source):
             cursor_name = match.group(1).lower()
-            line_num = self._get_line_number(source, match.start())
+            line_num = get_line_number_from_position(source, match.start())
             
             if cursor_name in self._cursor_map:
                 self._cursor_map[cursor_name].open_lines.append(line_num)
@@ -240,7 +239,7 @@ class CursorAnalyzer:
         # FETCH
         for match in self.FETCH_CURSOR.finditer(source):
             cursor_name = match.group(1).lower()
-            line_num = self._get_line_number(source, match.start())
+            line_num = get_line_number_from_position(source, match.start())
             
             if cursor_name in self._cursor_map:
                 self._cursor_map[cursor_name].fetch_lines.append(line_num)
@@ -248,7 +247,7 @@ class CursorAnalyzer:
         # CLOSE
         for match in self.CLOSE_CURSOR.finditer(source):
             cursor_name = match.group(1).lower()
-            line_num = self._get_line_number(source, match.start())
+            line_num = get_line_number_from_position(source, match.start())
             
             if cursor_name in self._cursor_map:
                 self._cursor_map[cursor_name].close_lines.append(line_num)
@@ -297,7 +296,7 @@ class CursorAnalyzer:
                 inner_cursor = match.group(1).lower()
                 if inner_cursor != outer_cursor:
                     abs_pos = loop_start + match.start()
-                    line_num = self._get_line_number(source, abs_pos)
+                    line_num = get_line_number_from_position(source, abs_pos)
                     
                     self.result.issues.append(CursorIssue(
                         cursor_name=inner_cursor,
@@ -377,7 +376,7 @@ class CursorAnalyzer:
         for match in self.FETCH_CURSOR.finditer(source):
             cursor_name = match.group(1).lower()
             fetch_end = match.end()
-            line_num = self._get_line_number(source, match.start())
+            line_num = get_line_number_from_position(source, match.start())
             
             # Chercher une vérification SQLCODE dans les 200 caractères suivants
             following = source[fetch_end:fetch_end + 300]

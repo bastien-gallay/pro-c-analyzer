@@ -30,7 +30,7 @@ class ProCParser:
     Extrait les fonctions et leur structure pour analyse.
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         self._parser = Parser(Language(tsc.language()))
         self._tree = None
         self._source = None
@@ -97,28 +97,43 @@ class ProCParser:
             self._find_functions(child, functions)
     
     def _extract_function_info(self, node: Node) -> Optional[FunctionInfo]:
-        """Extrait les informations d'une définition de fonction"""
+        """
+        Extrait les informations d'une définition de fonction.
+        
+        Parse l'AST pour extraire le nom, le type de retour, et les paramètres.
+        Gère les cas complexes comme les fonctions retournant des pointeurs.
+        
+        Args:
+            node: Nœud AST de type 'function_definition'
+            
+        Returns:
+            FunctionInfo si l'extraction réussit, None sinon
+        """
         name = None
         return_type = "void"
         parameters = []
         
         # Chercher le declarator (contient le nom et les paramètres)
+        # L'AST de tree-sitter sépare le type de retour du declarator qui contient
+        # le nom et les paramètres, d'où cette recherche en deux étapes
         declarator = None
         for child in node.children:
             if child.type == 'function_declarator':
                 declarator = child
                 break
             elif child.type == 'pointer_declarator':
-                # Fonction retournant un pointeur
+                # Fonction retournant un pointeur: le declarator est imbriqué
+                # Exemple: int* func() → pointer_declarator contient function_declarator
                 for subchild in child.children:
                     if subchild.type == 'function_declarator':
                         declarator = subchild
                         break
             elif child.type in ('primitive_type', 'type_identifier', 'sized_type_specifier'):
+                # Le type de retour peut être avant ou dans le declarator selon la syntaxe C
                 return_type = self.get_node_text(child)
         
         if declarator:
-            # Extraire le nom de la fonction
+            # Extraire le nom et les paramètres depuis le declarator
             for child in declarator.children:
                 if child.type == 'identifier':
                     name = self.get_node_text(child)
@@ -126,7 +141,8 @@ class ProCParser:
                     parameters = self._extract_parameters(child)
         
         if not name:
-            # Essayer une autre approche pour les déclarations complexes
+            # Fallback pour les déclarations complexes (fonctions avec qualifiers, etc.)
+            # Certaines syntaxes C complexes ne sont pas couvertes par le parsing standard
             name = self._find_function_name(node)
         
         if name:
@@ -142,7 +158,18 @@ class ProCParser:
         return None
     
     def _find_function_name(self, node: Node) -> Optional[str]:
-        """Cherche le nom de fonction dans un nœud de définition"""
+        """
+        Cherche le nom de fonction dans un nœud de définition.
+        
+        Méthode de fallback pour les déclarations complexes où le nom
+        n'a pas pu être extrait par _extract_function_info.
+        
+        Args:
+            node: Nœud AST à analyser
+            
+        Returns:
+            Nom de la fonction si trouvé, None sinon
+        """
         for child in node.children:
             if child.type == 'function_declarator':
                 for subchild in child.children:

@@ -167,7 +167,7 @@ class HalsteadCalculator:
         'null',
     }
     
-    def __init__(self, parser: ProCParser):
+    def __init__(self, parser: ProCParser) -> None:
         self.parser = parser
         self._cache: Dict[str, HalsteadMetrics] = {}
     

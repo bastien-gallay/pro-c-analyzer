@@ -9,7 +9,7 @@ En pratique, on compte: 1 + nombre de points de décision
 """
 
 from tree_sitter import Node
-from typing import Dict, Set
+from typing import Dict, Set, Any
 from .parser import FunctionInfo, ProCParser
 
 
@@ -35,7 +35,7 @@ class CyclomaticCalculator:
     # Opérateurs logiques qui créent des branches supplémentaires
     LOGICAL_OPERATORS = {'&&', '||'}
     
-    def __init__(self, parser: ProCParser):
+    def __init__(self, parser: ProCParser) -> None:
         self.parser = parser
         self._cache: Dict[str, int] = {}
     
@@ -93,7 +93,7 @@ class CyclomaticCalculator:
             results[func.name] = self.calculate(func)
         return results
     
-    def get_details(self, function: FunctionInfo) -> Dict:
+    def get_details(self, function: FunctionInfo) -> Dict[str, Any]:
         """
         Retourne le détail des contributeurs à la complexité.
         

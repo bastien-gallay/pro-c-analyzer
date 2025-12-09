@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Set, Optional, Tuple
 from enum import Enum
 
+from .utils import get_line_number_from_position
+
 
 class MemoryIssueType(Enum):
     """Types de problèmes mémoire"""
@@ -146,23 +148,28 @@ class MemoryAnalyzer:
     # Pattern pour détecter free
     FREE_PATTERN = re.compile(r'\bfree\s*\(\s*(\w+)\s*\)')
     
-    # Pattern pour vérification NULL après malloc
+    # Patterns pour détecter les vérifications NULL après allocation
+    # On accepte plusieurs variantes car les développeurs utilisent différents styles
+    # (Yoda conditions, vérifications explicites, implicites)
     NULL_CHECK_PATTERNS = [
         re.compile(r'if\s*\(\s*(\w+)\s*==\s*NULL\s*\)'),
-        re.compile(r'if\s*\(\s*NULL\s*==\s*(\w+)\s*\)'),
+        re.compile(r'if\s*\(\s*NULL\s*==\s*(\w+)\s*\)'),  # Yoda condition (prévention erreur = au lieu de ==)
         re.compile(r'if\s*\(\s*!\s*(\w+)\s*\)'),
-        re.compile(r'if\s*\(\s*(\w+)\s*\)'),  # if (ptr) - vérification implicite
+        re.compile(r'if\s*\(\s*(\w+)\s*\)'),  # Vérification implicite (if (ptr) équivaut à if (ptr != NULL))
     ]
     
-    # Pattern pour mise à NULL après free
+    # Pattern pour détecter la mise à NULL après free
+    # Important pour éviter les dangling pointers (références à mémoire libérée)
     NULL_ASSIGN_PATTERN = re.compile(r'(\w+)\s*=\s*NULL\s*;')
     
-    # Pattern pour sizeof sur pointeur (erreur courante)
+    # Pattern pour détecter sizeof() sur un pointeur au lieu du type pointé
+    # Erreur classique: malloc(sizeof(ptr)) alloue seulement la taille du pointeur (8 bytes)
+    # au lieu de la taille de l'objet pointé, causant des buffer overflows
     SIZEOF_POINTER_PATTERN = re.compile(
         r'(malloc|calloc|realloc)\s*\([^)]*sizeof\s*\(\s*(\w+)\s*\)'
     )
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.result = MemoryAnalysisResult()
         self._lines: List[str] = []
         self._allocations: Dict[str, AllocationInfo] = {}
@@ -202,9 +209,6 @@ class MemoryAnalyzer:
         self.result.allocations = list(self._allocations.values())
         return self.result
     
-    def _get_line_number(self, source: str, pos: int) -> int:
-        """Convertit une position en numéro de ligne"""
-        return source[:pos].count('\n') + 1
     
     def _get_line(self, line_num: int) -> str:
         """Récupère une ligne du code"""
@@ -217,7 +221,7 @@ class MemoryAnalyzer:
         for match in self.MALLOC_PATTERN.finditer(source):
             var_name = match.group(1)
             alloc_func = match.group(2).lower()
-            line_num = self._get_line_number(source, match.start())
+            line_num = get_line_number_from_position(source, match.start())
             
             alloc_info = AllocationInfo(
                 variable=var_name,
@@ -230,7 +234,7 @@ class MemoryAnalyzer:
         """Trouve tous les appels à free()"""
         for match in self.FREE_PATTERN.finditer(source):
             var_name = match.group(1)
-            line_num = self._get_line_number(source, match.start())
+            line_num = get_line_number_from_position(source, match.start())
             
             if var_name in self._allocations:
                 self._allocations[var_name].has_free = True
@@ -310,7 +314,7 @@ class MemoryAnalyzer:
             pattern = re.compile(rf'\b{func_name}\s*\(', re.IGNORECASE)
             
             for match in pattern.finditer(source):
-                line_num = self._get_line_number(source, match.start())
+                line_num = get_line_number_from_position(source, match.start())
                 
                 severity = {
                     'CRITICAL': MemorySeverity.CRITICAL,
@@ -341,7 +345,7 @@ class MemoryAnalyzer:
         
         for match in pattern.finditer(source):
             var_name = match.group(2)
-            line_num = self._get_line_number(source, match.start())
+            line_num = get_line_number_from_position(source, match.start())
             
             # Vérifier si c'est un pointeur (heuristique: chercher la déclaration)
             decl_pattern = re.compile(rf'\b\w+\s*\*+\s*{var_name}\b')

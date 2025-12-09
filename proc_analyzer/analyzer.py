@@ -3,7 +3,6 @@ Analyseur Pro*C principal
 Orchestre le prétraitement, parsing et calcul des métriques
 """
 
-import os
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Iterator, Any
@@ -59,15 +58,15 @@ class FileMetrics:
     total_lines: int
     non_empty_lines: int
     functions: List[FunctionMetrics] = field(default_factory=list)
-    sql_statistics: Dict = field(default_factory=dict)
+    sql_statistics: Dict[str, Any] = field(default_factory=dict)
     parse_errors: bool = False
     error_message: str = ""
     
     # Nouvelles métriques
-    module_info: Optional[Dict] = None
-    todos: List[Dict] = field(default_factory=list)
-    cursor_analysis: Optional[Dict] = None
-    memory_analysis: Optional[Dict] = None
+    module_info: Optional[Dict[str, Any]] = None
+    todos: List[Dict[str, Any]] = field(default_factory=list)
+    cursor_analysis: Optional[Dict[str, Any]] = None
+    memory_analysis: Optional[Dict[str, Any]] = None
     
     @property
     def function_count(self) -> int:
@@ -150,7 +149,7 @@ class FileMetrics:
 class AnalysisReport:
     """Rapport d'analyse complet"""
     files: List[FileMetrics] = field(default_factory=list)
-    module_inventory: Optional[Dict] = None
+    module_inventory: Optional[Dict[str, Any]] = None
     
     @property
     def total_files(self) -> int:
@@ -320,7 +319,7 @@ class ProCAnalyzer:
         enable_todos: bool = True,
         enable_cursors: bool = True,
         enable_memory: bool = True,
-    ):
+    ) -> None:
         self.preprocessor = ProCPreprocessor()
         self.parser = ProCParser()
         
@@ -332,6 +331,52 @@ class ProCAnalyzer:
         
         # Inventaire des modules
         self.module_inventory = ModuleInventory()
+    
+    def _create_function_metrics(
+        self,
+        func: FunctionInfo,
+        sql_blocks: List[ExecSqlBlock],
+        cyclo_calc: CyclomaticCalculator,
+        cognitive_calc: CognitiveCalculator,
+        halstead_calc: Optional[HalsteadCalculator],
+    ) -> FunctionMetrics:
+        """
+        Crée les métriques pour une fonction.
+        
+        Args:
+            func: Information sur la fonction
+            sql_blocks: Liste des blocs SQL trouvés
+            cyclo_calc: Calculateur de complexité cyclomatique
+            cognitive_calc: Calculateur de complexité cognitive
+            halstead_calc: Calculateur Halstead (optionnel)
+            
+        Returns:
+            Métriques de la fonction
+        """
+        # Compter les blocs SQL dans cette fonction
+        sql_blocks_in_function = sum(
+            1 for block in sql_blocks
+            if func.start_line <= block.line_number <= func.end_line
+        )
+        
+        func_metrics = FunctionMetrics(
+            name=func.name,
+            start_line=func.start_line,
+            end_line=func.end_line,
+            line_count=func.line_count,
+            cyclomatic_complexity=cyclo_calc.calculate(func),
+            cognitive_complexity=cognitive_calc.calculate(func),
+            sql_blocks_count=sql_blocks_in_function,
+            parameters_count=len(func.parameters),
+            return_type=func.return_type,
+        )
+        
+        # Halstead (optionnel)
+        if halstead_calc:
+            halstead_metrics = halstead_calc.calculate(func)
+            func_metrics.halstead = halstead_metrics.to_dict()
+        
+        return func_metrics
     
     def analyze_source(self, source: str, filepath: str = "<string>") -> FileMetrics:
         """
@@ -370,58 +415,57 @@ class ProCAnalyzer:
             
             # Analyser chaque fonction
             for func in self.parser.get_functions():
-                # Compter les blocs SQL dans cette fonction
-                sql_in_func = sum(
-                    1 for block in sql_blocks
-                    if func.start_line <= block.line_number <= func.end_line
+                func_metrics = self._create_function_metrics(
+                    func, sql_blocks, cyclo_calc, cognitive_calc, halstead_calc
                 )
-                
-                func_metrics = FunctionMetrics(
-                    name=func.name,
-                    start_line=func.start_line,
-                    end_line=func.end_line,
-                    line_count=func.line_count,
-                    cyclomatic_complexity=cyclo_calc.calculate(func),
-                    cognitive_complexity=cognitive_calc.calculate(func),
-                    sql_blocks_count=sql_in_func,
-                    parameters_count=len(func.parameters),
-                    return_type=func.return_type,
-                )
-                
-                # Halstead
-                if halstead_calc:
-                    halstead_metrics = halstead_calc.calculate(func)
-                    func_metrics.halstead = halstead_metrics.to_dict()
-                
                 metrics.functions.append(func_metrics)
             
-            # Analyse des commentaires et TODOs
-            if self.enable_todos:
-                comment_analyzer = CommentAnalyzer()
-                todos, module_info = comment_analyzer.analyze(source, filepath)
-                metrics.todos = [t.to_dict() for t in todos]
-                metrics.module_info = module_info.to_dict()
+            # Analyses supplémentaires
+            self._analyze_additional_metrics(source, filepath, metrics)
                 
-                # Ajouter au module inventory
-                self.module_inventory.add_module(module_info)
-            
-            # Analyse des curseurs SQL
-            if self.enable_cursors:
-                cursor_analyzer = CursorAnalyzer()
-                cursor_result = cursor_analyzer.analyze(source)
-                metrics.cursor_analysis = cursor_result.to_dict()
-            
-            # Analyse mémoire
-            if self.enable_memory:
-                memory_analyzer = MemoryAnalyzer()
-                memory_result = memory_analyzer.analyze(source)
-                metrics.memory_analysis = memory_result.to_dict()
-                
-        except Exception as e:
+        except (ValueError, TypeError, AttributeError, KeyError) as e:
+            # Erreurs de parsing ou de structure de données
             metrics.parse_errors = True
-            metrics.error_message = str(e)
+            metrics.error_message = f"Erreur d'analyse: {type(e).__name__}: {str(e)}"
+        except Exception as e:
+            # Erreurs inattendues - on les capture mais avec un message plus détaillé
+            metrics.parse_errors = True
+            metrics.error_message = f"Erreur inattendue lors de l'analyse: {type(e).__name__}: {str(e)}"
         
         return metrics
+    
+    def _analyze_additional_metrics(
+        self, source: str, filepath: str, metrics: FileMetrics
+    ) -> None:
+        """
+        Effectue les analyses supplémentaires (TODOs, curseurs, mémoire).
+        
+        Args:
+            source: Code source Pro*C
+            filepath: Chemin du fichier
+            metrics: Métriques du fichier à enrichir
+        """
+        # Analyse des commentaires et TODOs
+        if self.enable_todos:
+            comment_analyzer = CommentAnalyzer()
+            todos, module_info = comment_analyzer.analyze(source, filepath)
+            metrics.todos = [t.to_dict() for t in todos]
+            metrics.module_info = module_info.to_dict()
+            
+            # Ajouter au module inventory
+            self.module_inventory.add_module(module_info)
+        
+        # Analyse des curseurs SQL
+        if self.enable_cursors:
+            cursor_analyzer = CursorAnalyzer()
+            cursor_result = cursor_analyzer.analyze(source)
+            metrics.cursor_analysis = cursor_result.to_dict()
+        
+        # Analyse mémoire
+        if self.enable_memory:
+            memory_analyzer = MemoryAnalyzer()
+            memory_result = memory_analyzer.analyze(source)
+            metrics.memory_analysis = memory_result.to_dict()
     
     def analyze_file(self, filepath: str) -> FileMetrics:
         """
@@ -446,13 +490,13 @@ class ProCAnalyzer:
         
         try:
             source = path.read_text(encoding='utf-8', errors='replace')
-        except Exception as e:
+        except (IOError, OSError, UnicodeDecodeError) as e:
             return FileMetrics(
                 filepath=str(path),
                 total_lines=0,
                 non_empty_lines=0,
                 parse_errors=True,
-                error_message=f"Cannot read file: {e}"
+                error_message=f"Erreur de lecture du fichier: {type(e).__name__}: {str(e)}"
             )
         
         return self.analyze_source(source, str(path))

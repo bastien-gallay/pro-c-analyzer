@@ -9,7 +9,7 @@ Détecte:
 
 import re
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
 from pathlib import Path
 
 
@@ -123,7 +123,7 @@ class CommentAnalyzer:
     INCLUDE_PATTERN = re.compile(r'#include\s*[<"]([^>"]+)[>"]')
     EXEC_SQL_INCLUDE = re.compile(r'EXEC\s+SQL\s+INCLUDE\s+(\w+)', re.IGNORECASE)
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.todos: List[TodoItem] = []
         self.module_info: Optional[ModuleInfo] = None
     
@@ -305,7 +305,7 @@ class ModuleInventory:
     Construit un inventaire des modules d'un projet.
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.modules: Dict[str, ModuleInfo] = {}
         self.by_directory: Dict[str, List[ModuleInfo]] = {}
     
@@ -318,7 +318,7 @@ class ModuleInventory:
             self.by_directory[directory] = []
         self.by_directory[directory].append(module_info)
     
-    def get_summary(self) -> Dict:
+    def get_summary(self) -> Dict[str, Any]:
         """Retourne un résumé de l'inventaire"""
         return {
             'total_modules': len(self.modules),
@@ -328,7 +328,7 @@ class ModuleInventory:
             },
         }
     
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> Dict[str, Any]:
         """Export complet"""
         return {
             'summary': self.get_summary(),

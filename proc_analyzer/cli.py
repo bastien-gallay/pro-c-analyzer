@@ -21,7 +21,17 @@ console = Console()
 
 
 def severity_color(value: int, low: int, medium: int) -> str:
-    """Retourne une couleur selon la sévérité"""
+    """
+    Retourne une couleur selon la sévérité d'une valeur.
+    
+    Args:
+        value: Valeur à évaluer
+        low: Seuil bas (vert si <= low)
+        medium: Seuil moyen (jaune si <= medium, rouge sinon)
+        
+    Returns:
+        Nom de couleur Rich (green, yellow, ou red)
+    """
     if value <= low:
         return "green"
     elif value <= medium:
@@ -31,7 +41,15 @@ def severity_color(value: int, low: int, medium: int) -> str:
 
 
 def issue_severity_color(severity: str) -> str:
-    """Couleur selon la sévérité d'un issue"""
+    """
+    Retourne la couleur Rich selon la sévérité d'un problème.
+    
+    Args:
+        severity: Niveau de sévérité (critical, error, warning, info)
+        
+    Returns:
+        Style de couleur Rich pour l'affichage
+    """
     colors = {
         'critical': 'red bold',
         'error': 'red',
@@ -42,7 +60,13 @@ def issue_severity_color(severity: str) -> str:
 
 
 def print_file_report(metrics: FileMetrics, verbose: bool = False) -> None:
-    """Affiche le rapport pour un fichier"""
+    """
+    Affiche le rapport d'analyse pour un fichier.
+    
+    Args:
+        metrics: Métriques du fichier à afficher
+        verbose: Si True, affiche les détails Halstead et autres métriques
+    """
     # Titre du fichier
     console.print(f"\n[bold blue]📄 {metrics.filepath}[/bold blue]")
     
@@ -599,8 +623,12 @@ def preprocess(path: str):
     console.print(processed)
 
 
-def main():
-    """Point d'entrée principal"""
+def main() -> None:
+    """
+    Point d'entrée principal de l'application CLI.
+    
+    Démarre l'interface en ligne de commande avec Click.
+    """
     cli()
 
 

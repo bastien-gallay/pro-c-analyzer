@@ -13,7 +13,7 @@ Règles principales:
 """
 
 from tree_sitter import Node
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Any
 from .parser import FunctionInfo, ProCParser
 
 
@@ -26,6 +26,8 @@ class CognitiveCalculator:
     """
     
     # Structures qui incrémentent la complexité ET augmentent l'imbrication
+    # Ces structures créent un nouveau niveau d'imbrication qui pénalise
+    # la lisibilité selon les principes SonarSource (complexité cognitive)
     NESTING_STRUCTURES = {
         'if_statement',
         'while_statement', 
@@ -36,16 +38,19 @@ class CognitiveCalculator:
     }
     
     # Structures qui incrémentent la complexité SANS augmenter l'imbrication
+    # Contrairement aux structures ci-dessus, celles-ci ajoutent de la complexité
+    # mais ne créent pas un nouveau niveau d'imbrication (donc pas de pénalité supplémentaire)
     NON_NESTING_INCREMENTS = {
-        'else_clause',      # else ajoute 1 mais n'imbrique pas plus
-        'case_statement',   # case dans switch
-        'goto_statement',   # goto
+        'else_clause',      # else ajoute 1 mais garde le même niveau d'imbrication
+        'case_statement',   # case dans switch - même niveau que le switch
+        'goto_statement',   # goto - saut mais pas d'imbrication
     }
     
-    # Les breaks/continues vers des labels ajoutent +1
+    # Les breaks/continues vers des labels ajoutent +1 car ils créent
+    # un flux de contrôle non linéaire difficile à suivre mentalement
     JUMP_STATEMENTS = {'break_statement', 'continue_statement'}
     
-    def __init__(self, parser: ProCParser):
+    def __init__(self, parser: ProCParser) -> None:
         self.parser = parser
         self._cache: Dict[str, int] = {}
     
@@ -90,61 +95,104 @@ class CognitiveCalculator:
         Returns:
             Complexité pour ce sous-arbre
         """
-        complexity = 0
-        
-        # Structures qui incrémentent ET augmentent l'imbrication
         if node.type in self.NESTING_STRUCTURES:
-            # +1 pour la structure + niveau d'imbrication actuel
-            complexity += 1 + nesting_level
-            
-            # Traiter les enfants avec un niveau d'imbrication augmenté
-            for child in node.children:
-                if child.type == 'compound_statement':
-                    # Corps de la structure - imbrication +1
-                    complexity += self._calculate_recursive(child, nesting_level + 1)
-                elif child.type == 'else_clause':
-                    # else: +1 mais garde le même niveau pour son contenu
-                    complexity += 1
-                    for subchild in child.children:
-                        if subchild.type == 'compound_statement':
-                            complexity += self._calculate_recursive(subchild, nesting_level + 1)
-                        elif subchild.type == 'if_statement':
-                            # else if: le if sera compté normalement
-                            complexity += self._calculate_recursive(subchild, nesting_level)
-                        else:
-                            complexity += self._calculate_recursive(subchild, nesting_level + 1)
-                elif child.type == 'if_statement':
-                    # else if chaîné - ne pas augmenter l'imbrication
-                    complexity += self._calculate_recursive(child, nesting_level)
-                else:
-                    complexity += self._calculate_recursive(child, nesting_level)
-        
-        # Structures qui incrémentent SANS augmenter l'imbrication
+            return self._calculate_nesting_structure(node, nesting_level)
         elif node.type == 'case_statement':
-            complexity += 1
-            for child in node.children:
-                complexity += self._calculate_recursive(child, nesting_level)
-        
+            return self._calculate_case_statement(node, nesting_level)
         elif node.type == 'goto_statement':
-            complexity += 1
-        
-        # Break/continue vers un label
+            return 1
         elif node.type in self.JUMP_STATEMENTS:
-            # Vérifier si c'est un break/continue vers un label
-            if self._has_label(node):
-                complexity += 1
-            # Sinon, pas d'incrément
-        
-        # Séquences d'opérateurs logiques
+            return 1 if self._has_label(node) else 0
         elif node.type == 'binary_expression':
-            complexity += self._count_logical_sequences(node)
-            # Ne pas descendre dans les enfants car déjà traités
-        
-        # Pour tous les autres nœuds, descendre récursivement
+            return self._count_logical_sequences(node)
         else:
-            for child in node.children:
+            return self._calculate_default(node, nesting_level)
+    
+    def _calculate_nesting_structure(self, node: Node, nesting_level: int) -> int:
+        """
+        Calcule la complexité pour une structure qui incrémente ET augmente l'imbrication.
+        
+        Args:
+            node: Nœud de structure (if, while, for, etc.)
+            nesting_level: Niveau d'imbrication actuel
+            
+        Returns:
+            Complexité pour cette structure et ses enfants
+        """
+        # +1 pour la structure + niveau d'imbrication actuel
+        complexity = 1 + nesting_level
+        
+        for child in node.children:
+            if child.type == 'compound_statement':
+                complexity += self._calculate_recursive(child, nesting_level + 1)
+            elif child.type == 'else_clause':
+                complexity += self._calculate_else_clause(child, nesting_level)
+            elif child.type == 'if_statement':
+                # else if chaîné - ne pas augmenter l'imbrication
+                complexity += self._calculate_recursive(child, nesting_level)
+            else:
                 complexity += self._calculate_recursive(child, nesting_level)
         
+        return complexity
+    
+    def _calculate_else_clause(self, else_node: Node, nesting_level: int) -> int:
+        """
+        Calcule la complexité pour une clause else.
+        
+        else: +1 mais garde le même niveau pour son contenu (sauf else if).
+        
+        Args:
+            else_node: Nœud else_clause
+            nesting_level: Niveau d'imbrication actuel
+            
+        Returns:
+            Complexité pour la clause else
+        """
+        complexity = 1
+        
+        for subchild in else_node.children:
+            if subchild.type == 'compound_statement':
+                complexity += self._calculate_recursive(subchild, nesting_level + 1)
+            elif subchild.type == 'if_statement':
+                # else if: le if sera compté normalement sans augmenter l'imbrication
+                complexity += self._calculate_recursive(subchild, nesting_level)
+            else:
+                complexity += self._calculate_recursive(subchild, nesting_level + 1)
+        
+        return complexity
+    
+    def _calculate_case_statement(self, node: Node, nesting_level: int) -> int:
+        """
+        Calcule la complexité pour un case statement.
+        
+        case incrémente +1 mais n'augmente pas l'imbrication.
+        
+        Args:
+            node: Nœud case_statement
+            nesting_level: Niveau d'imbrication actuel
+            
+        Returns:
+            Complexité pour le case et ses enfants
+        """
+        complexity = 1
+        for child in node.children:
+            complexity += self._calculate_recursive(child, nesting_level)
+        return complexity
+    
+    def _calculate_default(self, node: Node, nesting_level: int) -> int:
+        """
+        Calcule la complexité pour un nœud par défaut (récursion simple).
+        
+        Args:
+            node: Nœud à traiter
+            nesting_level: Niveau d'imbrication actuel
+            
+        Returns:
+            Complexité pour ce nœud et ses enfants
+        """
+        complexity = 0
+        for child in node.children:
+            complexity += self._calculate_recursive(child, nesting_level)
         return complexity
     
     def _has_label(self, jump_node: Node) -> bool:
@@ -158,9 +206,19 @@ class CognitiveCalculator:
         """
         Compte les séquences d'opérateurs logiques.
         
-        Chaque changement d'opérateur dans une chaîne ajoute +1.
-        Exemple: a && b && c = +1 (une séquence)
-                 a && b || c = +2 (deux séquences différentes)
+        Chaque changement d'opérateur dans une chaîne ajoute +1 à la complexité.
+        Cela reflète l'effort mental supplémentaire pour comprendre des conditions
+        avec des opérateurs mixtes.
+        
+        Args:
+            node: Nœud AST de type 'binary_expression'
+            
+        Returns:
+            Nombre de séquences logiques (changements d'opérateur + 1)
+            
+        Examples:
+            a && b && c → 1 séquence (tous &&)
+            a && b || c → 2 séquences (changement && → ||)
         """
         operators = self._collect_logical_operators(node)
         
@@ -176,7 +234,19 @@ class CognitiveCalculator:
         return sequences
     
     def _collect_logical_operators(self, node: Node) -> List[str]:
-        """Collecte tous les opérateurs logiques d'une expression"""
+        """
+        Collecte tous les opérateurs logiques d'une expression binaire.
+        
+        Parcourt récursivement l'arbre d'expression pour extraire tous
+        les opérateurs && et ||. Utilisé pour calculer les séquences logiques
+        qui augmentent la complexité cognitive.
+        
+        Args:
+            node: Nœud AST de type 'binary_expression'
+            
+        Returns:
+            Liste des opérateurs logiques trouvés (&&, ||)
+        """
         operators = []
         
         if node.type != 'binary_expression':
@@ -222,7 +292,7 @@ class CognitiveCalculator:
             results[func.name] = self.calculate(func)
         return results
     
-    def get_details(self, function: FunctionInfo) -> Dict:
+    def get_details(self, function: FunctionInfo) -> Dict[str, Any]:
         """
         Retourne le détail des contributeurs à la complexité.
         
@@ -253,7 +323,7 @@ class CognitiveCalculator:
         details['total'] = self.calculate(function)
         return details
     
-    def _collect_details(self, node: Node, nesting: int, details: Dict) -> None:
+    def _collect_details(self, node: Node, nesting: int, details: Dict[str, Any]) -> None:
         """Collecte les détails récursivement"""
         details['max_nesting'] = max(details['max_nesting'], nesting)
         

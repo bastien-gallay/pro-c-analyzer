@@ -66,7 +66,7 @@ class ProCPreprocessor:
         'CALL': re.compile(r'^\s*CALL\b', re.IGNORECASE),
     }
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.sql_blocks: List[ExecSqlBlock] = []
         self._line_offsets: List[int] = []
     

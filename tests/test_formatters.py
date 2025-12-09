@@ -670,13 +670,63 @@ class TestFormattersPerFileIssues:
         output = formatter.format(report)
         
         # Vérifier que chaque fichier a ses propres issues
+        # Trouver les sections de fichiers en cherchant jusqu'à la prochaine section ou la fin
         file1_section_start = output.find("file1.pc")
-        file1_section_end = output.find("file2.pc")
-        file1_section = output[file1_section_start:file1_section_end]
+        file2_section_start = output.find("file2.pc")
+        
+        # La section file1 va de file1.pc jusqu'à file2.pc (ou jusqu'à la fin si file2 n'existe pas)
+        if file2_section_start != -1:
+            file1_section = output[file1_section_start:file2_section_start]
+        else:
+            # Si file2 n'est pas trouvé, chercher la fin de la section file1
+            # Chercher le </div></div> qui termine la section file1, avant la prochaine section globale
+            file1_section_end = output.find("</div></div>", file1_section_start)
+            if file1_section_end != -1:
+                # Vérifier que ce n'est pas suivi d'une section globale (<h2>)
+                next_h2 = output.find("<h2>", file1_section_end)
+                if next_h2 != -1 and next_h2 - file1_section_end < 20:
+                    # Le </div></div> est suivi d'une section globale, c'est la fin de file1
+                    file1_section = output[file1_section_start:file1_section_end + len("</div></div>")]
+                else:
+                    file1_section = output[file1_section_start:file1_section_end + len("</div></div>")]
+            else:
+                file1_section = output[file1_section_start:]
         
         assert "Issue in file1" in file1_section
         assert "Issue in file2" not in file1_section
         
-        file2_section = output[file1_section_end:]
+        # La section file2 va de file2.pc jusqu'à la fin de sa section </div></div>
+        # (avant les sections globales comme <h2>TODO/FIXME</h2>)
+        if file2_section_start != -1:
+            # Chercher le </div></div> qui termine la section file2
+            file2_section_end = output.find("</div></div>", file2_section_start)
+            if file2_section_end != -1:
+                # Vérifier que ce n'est pas suivi d'une section globale (<h2>)
+                next_h2 = output.find("<h2>", file2_section_end)
+                if next_h2 != -1 and next_h2 - file2_section_end < 20:
+                    # Le </div></div> est suivi d'une section globale, c'est la fin de file2
+                    file2_section = output[file2_section_start:file2_section_end + len("</div></div>")]
+                else:
+                    # Chercher la prochaine section de fichier ou section globale
+                    next_section = output.find('<div class="file-section">', file2_section_start + 1)
+                    if next_section != -1:
+                        file2_section = output[file2_section_start:next_section]
+                    else:
+                        file2_section = output[file2_section_start:file2_section_end + len("</div></div>")]
+            else:
+                # Pas de </div></div> trouvé, chercher la prochaine section
+                next_section = output.find('<div class="file-section">', file2_section_start + 1)
+                if next_section != -1:
+                    file2_section = output[file2_section_start:next_section]
+                else:
+                    # Chercher la prochaine section globale
+                    next_h2 = output.find("<h2>", file2_section_start + 1)
+                    if next_h2 != -1:
+                        file2_section = output[file2_section_start:next_h2]
+                    else:
+                        file2_section = output[file2_section_start:]
+        else:
+            file2_section = ""
+        
         assert "Issue in file2" in file2_section
         assert "Issue in file1" not in file2_section

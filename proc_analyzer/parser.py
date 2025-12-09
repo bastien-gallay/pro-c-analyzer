@@ -308,6 +308,13 @@ class ProCParser:
                     
                     for j in range(begin_line + 1, len(lines)):
                         line_text = lines[j]
+                        # Ignorer les commentaires (// et /* */)
+                        # Retirer les commentaires de ligne (//)
+                        if '//' in line_text:
+                            line_text = line_text[:line_text.index('//')]
+                        # Retirer les commentaires de bloc (/* */) - version simple
+                        line_text = re.sub(r'/\*.*?\*/', '', line_text)
+                        
                         # Compter les begin/end pour gérer l'imbrication
                         begin_count = len(re.findall(r'\bbegin\b', line_text, re.IGNORECASE))
                         end_count = len(re.findall(r'\bend\b', line_text, re.IGNORECASE))

@@ -350,7 +350,8 @@ end
         func = functions[0]
         assert func.name == "complex_function"
         # Le end final doit être détecté correctement malgré l'imbrication
-        assert func.end_line == 8
+        # Le end final est à l'index 8 (0-indexed) = ligne 9 (1-indexed)
+        assert func.end_line == 9
 
     def test_parse_mixed_standard_and_alternative_syntax(self):
         """Test de parsing avec fonctions standard et non-standard."""

@@ -176,7 +176,7 @@ class TestAnalyzeWithProgress:
             # Injecter directement le callback dans analyze_directory
             with patch.object(analyzer, 'analyze_directory') as mock_analyze:
                 mock_report = AnalysisReport()
-                mock_report.files = analyzer.analyze_file(str(tmp_path / "file1.pc"))
+                mock_report.files = [analyzer.analyze_file(str(tmp_path / "file1.pc"))]
                 mock_analyze.return_value = mock_report
                 
                 analyze_with_progress(analyzer, str(tmp_path), pattern="*.pc")

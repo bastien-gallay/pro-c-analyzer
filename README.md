@@ -53,8 +53,17 @@ proc-analyzer inventory ./src
 ### Export
 
 ```bash
-# JSON
+# JSON (compact)
 proc-analyzer analyze ./src -f json -o rapport.json
+
+# JSON (pretty, avec indentation)
+proc-analyzer analyze ./src -f json-pretty -o rapport.json
+
+# HTML (rapport interactif)
+proc-analyzer analyze ./src -f html -o rapport.html
+
+# Markdown (compatible GitHub/GitLab)
+proc-analyzer analyze ./src -f markdown -o rapport.md
 
 # CSV
 proc-analyzer analyze ./src -f csv -o rapport.csv
@@ -64,8 +73,9 @@ proc-analyzer analyze ./src -f csv -o rapport.csv
 
 ```
 --pattern, -p      Pattern glob (défaut: *.pc)
---format, -f       Format: text, json, csv
---output, -o       Fichier de sortie
+--format, -f       Format: text, json, json-pretty, html, markdown, csv
+                   (défaut: text)
+--output, -o       Fichier de sortie (requis pour html/markdown)
 --threshold-cyclo  Seuil cyclomatique (défaut: 10)
 --threshold-cognitive  Seuil cognitif (défaut: 15)
 --recursive/-R     Recherche récursive (défaut: oui)
@@ -75,6 +85,38 @@ proc-analyzer analyze ./src -f csv -o rapport.csv
 --no-cursors       Désactiver analyse curseurs
 --no-memory        Désactiver analyse mémoire
 ```
+
+### Formats de sortie
+
+- **text** : Affichage formaté dans le terminal (avec Rich)
+- **json** : JSON compact sans indentation
+- **json-pretty** : JSON avec indentation pour lisibilité (inclut métadonnées)
+- **html** : Rapport HTML interactif avec CSS et JavaScript intégrés
+- **markdown** : Markdown compatible GitHub/GitLab avec tableaux
+- **csv** : Export CSV pour analyse dans des tableurs
+
+#### Détails des formats
+
+**JSON (json/json-pretty)**
+
+- Structure avec métadonnées (version, date de génération)
+- `json` : format compact sans indentation
+- `json-pretty` : format lisible avec indentation (recommandé)
+
+**HTML**
+
+- Rapport interactif autonome (CSS et JavaScript inclus)
+- Tableaux triables
+- Sections collapsibles
+- Code couleur pour les niveaux de complexité
+- Navigation facilitée
+
+**Markdown**
+
+- Format texte structuré compatible GitHub/GitLab
+- Tableaux au format Markdown
+- Badges et icônes pour les indicateurs
+- Parfait pour intégration dans documentation
 
 ## Exemple de sortie
 

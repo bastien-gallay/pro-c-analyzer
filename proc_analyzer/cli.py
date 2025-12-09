@@ -15,6 +15,7 @@ from rich.text import Text
 from rich import box
 
 from .analyzer import ProCAnalyzer, AnalysisReport, FileMetrics
+from .formatters import JSONFormatter, HTMLFormatter, MarkdownFormatter
 
 
 console = Console()
@@ -354,8 +355,8 @@ def cli():
 @cli.command()
 @click.argument('path', type=click.Path(exists=True))
 @click.option('--pattern', '-p', default='*.pc', help='Pattern glob pour les fichiers (défaut: *.pc)')
-@click.option('--format', '-f', 'output_format', type=click.Choice(['text', 'json', 'csv']), default='text', help='Format de sortie')
-@click.option('--output', '-o', type=click.Path(), help='Fichier de sortie (pour json/csv)')
+@click.option('--format', '-f', 'output_format', type=click.Choice(['text', 'json', 'json-pretty', 'html', 'markdown', 'csv']), default='text', help='Format de sortie')
+@click.option('--output', '-o', type=click.Path(), help='Fichier de sortie (requis pour html/markdown, optionnel pour json/csv)')
 @click.option('--threshold-cyclo', '-tc', default=10, help='Seuil complexité cyclomatique (défaut: 10)')
 @click.option('--threshold-cognitive', '-tg', default=15, help='Seuil complexité cognitive (défaut: 15)')
 @click.option('--recursive/--no-recursive', '-r/-R', default=True, help='Recherche récursive (défaut: oui)')
@@ -421,11 +422,29 @@ def analyze(
         return
     
     # Sortie selon le format demandé
-    if output_format == 'json':
+    if output_format in ('json', 'json-pretty'):
+        json_formatter = JSONFormatter(pretty=(output_format == 'json-pretty'))
         if output:
-            save_json(report, output)
+            json_formatter.save(report, output)
+            console.print(f"[green]✓ Rapport JSON sauvegardé: {output}[/green]")
         else:
-            console.print(report.to_json())
+            console.print(json_formatter.format(report))
+    
+    elif output_format == 'html':
+        if not output:
+            console.print("[red]Erreur: --output est requis pour le format HTML[/red]", err=True)
+            return
+        html_formatter = HTMLFormatter()
+        html_formatter.save(report, output)
+        console.print(f"[green]✓ Rapport HTML sauvegardé: {output}[/green]")
+    
+    elif output_format == 'markdown':
+        if not output:
+            console.print("[red]Erreur: --output est requis pour le format Markdown[/red]", err=True)
+            return
+        markdown_formatter = MarkdownFormatter()
+        markdown_formatter.save(report, output)
+        console.print(f"[green]✓ Rapport Markdown sauvegardé: {output}[/green]")
     
     elif output_format == 'csv':
         if output:
@@ -448,8 +467,11 @@ def analyze(
         if len(report.files) > 1 or report.total_functions > 0:
             print_summary(report, threshold_cyclo, threshold_cognitive)
         
+        # Si output est spécifié pour le format text, sauvegarder aussi en JSON
         if output:
-            save_json(report, output)
+            json_formatter = JSONFormatter(pretty=True)
+            json_formatter.save(report, output)
+            console.print(f"[green]✓ Rapport JSON sauvegardé: {output}[/green]")
 
 
 @cli.command()

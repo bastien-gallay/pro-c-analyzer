@@ -1,0 +1,36 @@
+<h2>Résumé</h2>
+<div class="summary-grid">
+    <div class="summary-card">
+        <h3>Fichiers analysés</h3>
+        <div class="value">{{ summary.total_files }}</div>
+    </div>
+    <div class="summary-card">
+        <h3>Fonctions totales</h3>
+        <div class="value">{{ summary.total_functions }}</div>
+    </div>
+    <div class="summary-card">
+        <h3>Lignes de code</h3>
+        <div class="value">{{ summary.total_lines_formatted }}</div>
+    </div>
+    <div class="summary-card filterable" data-filter-type="high-complexity" title="Cliquer pour filtrer les fichiers avec complexité cyclomatique élevée">
+        <h3>Complexité cyclomatique moyenne</h3>
+        <div class="value">{{ "%.2f"|format(summary.avg_cyclomatic) }}</div>
+    </div>
+    <div class="summary-card filterable" data-filter-type="high-cognitive" title="Cliquer pour filtrer les fichiers avec complexité cognitive élevée">
+        <h3>Complexité cognitive moyenne</h3>
+        <div class="value">{{ "%.2f"|format(summary.avg_cognitive) }}</div>
+    </div>
+    <div class="summary-card filterable" data-filter-type="todos" title="Cliquer pour filtrer les fichiers avec TODO/FIXME">
+        <h3>TODO/FIXME</h3>
+        <div class="value">{{ summary.total_todos }}</div>
+    </div>
+    <div class="summary-card filterable" data-filter-type="cursor-issues" title="Cliquer pour filtrer les fichiers avec problèmes de curseurs">
+        <h3>Problèmes curseurs</h3>
+        <div class="value">{{ summary.total_cursor_issues }}</div>
+    </div>
+    <div class="summary-card filterable" data-filter-type="memory-issues" title="Cliquer pour filtrer les fichiers avec problèmes mémoire">
+        <h3>Problèmes mémoire</h3>
+        <div class="value">{{ summary.total_memory_issues }}</div>
+    </div>
+</div>
+

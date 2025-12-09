@@ -139,32 +139,22 @@ class MemoryAnalyzer:
         'tmpnam': ('mkstemp', 'WARNING', 'tmpnam() a des race conditions'),
     }
     
-    # Pattern pour détecter les allocations
     MALLOC_PATTERN = re.compile(
         r'(\w+)\s*=\s*\(?\s*\w*\s*\*?\s*\)?\s*(malloc|calloc|realloc|strdup|strndup)\s*\(',
         re.IGNORECASE
     )
     
-    # Pattern pour détecter free
     FREE_PATTERN = re.compile(r'\bfree\s*\(\s*(\w+)\s*\)')
     
-    # Patterns pour détecter les vérifications NULL après allocation
-    # On accepte plusieurs variantes car les développeurs utilisent différents styles
-    # (Yoda conditions, vérifications explicites, implicites)
     NULL_CHECK_PATTERNS = [
         re.compile(r'if\s*\(\s*(\w+)\s*==\s*NULL\s*\)'),
-        re.compile(r'if\s*\(\s*NULL\s*==\s*(\w+)\s*\)'),  # Yoda condition (prévention erreur = au lieu de ==)
+        re.compile(r'if\s*\(\s*NULL\s*==\s*(\w+)\s*\)'),
         re.compile(r'if\s*\(\s*!\s*(\w+)\s*\)'),
-        re.compile(r'if\s*\(\s*(\w+)\s*\)'),  # Vérification implicite (if (ptr) équivaut à if (ptr != NULL))
+        re.compile(r'if\s*\(\s*(\w+)\s*\)'),
     ]
     
-    # Pattern pour détecter la mise à NULL après free
-    # Important pour éviter les dangling pointers (références à mémoire libérée)
     NULL_ASSIGN_PATTERN = re.compile(r'(\w+)\s*=\s*NULL\s*;')
     
-    # Pattern pour détecter sizeof() sur un pointeur au lieu du type pointé
-    # Erreur classique: malloc(sizeof(ptr)) alloue seulement la taille du pointeur (8 bytes)
-    # au lieu de la taille de l'objet pointé, causant des buffer overflows
     SIZEOF_POINTER_PATTERN = re.compile(
         r'(malloc|calloc|realloc)\s*\([^)]*sizeof\s*\(\s*(\w+)\s*\)'
     )
@@ -188,22 +178,11 @@ class MemoryAnalyzer:
         self._lines = source.split('\n')
         self._allocations = {}
         
-        # 1. Trouver toutes les allocations
         self._find_allocations(source)
-        
-        # 2. Trouver tous les free
         self._find_frees(source)
-        
-        # 3. Vérifier les checks NULL
         self._check_null_verifications(source)
-        
-        # 4. Détecter les fonctions dangereuses
         self._find_dangerous_functions(source)
-        
-        # 5. Détecter sizeof sur pointeur
         self._check_sizeof_pointer(source)
-        
-        # 6. Générer les issues pour malloc sans free
         self._report_unfreed_allocations()
         
         self.result.allocations = list(self._allocations.values())
@@ -211,13 +190,26 @@ class MemoryAnalyzer:
     
     
     def _get_line(self, line_num: int) -> str:
-        """Récupère une ligne du code"""
+        """
+        Récupère une ligne du code source.
+        
+        Args:
+            line_num: Numéro de ligne (1-indexed)
+            
+        Returns:
+            Contenu de la ligne ou chaîne vide si hors limites
+        """
         if 0 < line_num <= len(self._lines):
             return self._lines[line_num - 1]
         return ""
     
     def _find_allocations(self, source: str) -> None:
-        """Trouve toutes les allocations mémoire"""
+        """
+        Trouve toutes les allocations mémoire dans le code source.
+        
+        Args:
+            source: Code source C/Pro*C
+        """
         for match in self.MALLOC_PATTERN.finditer(source):
             var_name = match.group(1)
             alloc_func = match.group(2).lower()
@@ -231,7 +223,12 @@ class MemoryAnalyzer:
             self._allocations[var_name] = alloc_info
     
     def _find_frees(self, source: str) -> None:
-        """Trouve tous les appels à free()"""
+        """
+        Trouve tous les appels à free() et vérifie la mise à NULL.
+        
+        Args:
+            source: Code source C/Pro*C
+        """
         for match in self.FREE_PATTERN.finditer(source):
             var_name = match.group(1)
             line_num = get_line_number_from_position(source, match.start())
@@ -240,40 +237,40 @@ class MemoryAnalyzer:
                 self._allocations[var_name].has_free = True
                 self._allocations[var_name].free_line = line_num
             
-            # Vérifier si = NULL suit le free
-            # Chercher dans les 100 caractères suivants
             after_free = source[match.end():match.end() + 100]
             null_assign = self.NULL_ASSIGN_PATTERN.search(after_free)
             
             if null_assign:
-                if null_assign.group(1) == var_name:
-                    # OK, le pointeur est mis à NULL
-                    pass
-                else:
-                    # free() sans mise à NULL
-                    self.result.issues.append(MemoryIssue(
-                        issue_type=MemoryIssueType.FREE_NO_NULL,
-                        severity=MemorySeverity.WARNING,
-                        line_number=line_num,
-                        message=f"free({var_name}) sans mise à NULL - risque de dangling pointer",
-                        code_snippet=self._get_line(line_num),
-                        recommendation=f"Ajouter '{var_name} = NULL;' après free()",
-                    ))
+                if null_assign.group(1) != var_name:
+                    self._add_free_no_null_issue(var_name, line_num)
             else:
-                # Pas de = NULL trouvé
-                self.result.issues.append(MemoryIssue(
-                    issue_type=MemoryIssueType.FREE_NO_NULL,
-                    severity=MemorySeverity.WARNING,
-                    line_number=line_num,
-                    message=f"free({var_name}) sans mise à NULL - risque de dangling pointer",
-                    code_snippet=self._get_line(line_num),
-                    recommendation=f"Ajouter '{var_name} = NULL;' après free()",
-                ))
+                self._add_free_no_null_issue(var_name, line_num)
+    
+    def _add_free_no_null_issue(self, var_name: str, line_num: int) -> None:
+        """
+        Ajoute une issue pour un free() sans mise à NULL.
+        
+        Args:
+            var_name: Nom de la variable
+            line_num: Numéro de ligne
+        """
+        self.result.issues.append(MemoryIssue(
+            issue_type=MemoryIssueType.FREE_NO_NULL,
+            severity=MemorySeverity.WARNING,
+            line_number=line_num,
+            message=f"free({var_name}) sans mise à NULL - risque de dangling pointer",
+            code_snippet=self._get_line(line_num),
+            recommendation=f"Ajouter '{var_name} = NULL;' après free()",
+        ))
     
     def _check_null_verifications(self, source: str) -> None:
-        """Vérifie que les allocations sont suivies d'un check NULL"""
+        """
+        Vérifie que les allocations sont suivies d'un check NULL.
+        
+        Args:
+            source: Code source C/Pro*C
+        """
         for var_name, alloc_info in self._allocations.items():
-            # Chercher un check NULL dans les 300 caractères suivant l'allocation
             alloc_pos = self._find_position(source, alloc_info.line_number)
             if alloc_pos == -1:
                 continue
@@ -289,28 +286,51 @@ class MemoryAnalyzer:
                     break
             
             if not found_check:
-                self.result.issues.append(MemoryIssue(
-                    issue_type=MemoryIssueType.MALLOC_NO_CHECK,
-                    severity=MemorySeverity.ERROR,
-                    line_number=alloc_info.line_number,
-                    message=f"{alloc_info.function}() sans vérification NULL - crash si allocation échoue",
-                    code_snippet=self._get_line(alloc_info.line_number),
-                    recommendation=f"Ajouter: if ({var_name} == NULL) {{ /* gestion erreur */ }}",
-                ))
+                self._add_malloc_no_check_issue(var_name, alloc_info)
+    
+    def _add_malloc_no_check_issue(self, var_name: str, alloc_info: AllocationInfo) -> None:
+        """
+        Ajoute une issue pour une allocation sans vérification NULL.
+        
+        Args:
+            var_name: Nom de la variable
+            alloc_info: Informations sur l'allocation
+        """
+        self.result.issues.append(MemoryIssue(
+            issue_type=MemoryIssueType.MALLOC_NO_CHECK,
+            severity=MemorySeverity.ERROR,
+            line_number=alloc_info.line_number,
+            message=f"{alloc_info.function}() sans vérification NULL - crash si allocation échoue",
+            code_snippet=self._get_line(alloc_info.line_number),
+            recommendation=f"Ajouter: if ({var_name} == NULL) {{ /* gestion erreur */ }}",
+        ))
     
     def _find_position(self, source: str, line_num: int) -> int:
-        """Trouve la position du début d'une ligne"""
+        """
+        Trouve la position du début d'une ligne dans le source.
+        
+        Args:
+            source: Code source complet
+            line_num: Numéro de ligne (1-indexed)
+            
+        Returns:
+            Position du début de la ligne, ou -1 si hors limites
+        """
         lines = source.split('\n')
         pos = 0
         for i in range(line_num - 1):
             if i < len(lines):
-                pos += len(lines[i]) + 1  # +1 pour le \n
+                pos += len(lines[i]) + 1
         return pos
     
     def _find_dangerous_functions(self, source: str) -> None:
-        """Détecte l'utilisation de fonctions dangereuses"""
+        """
+        Détecte l'utilisation de fonctions dangereuses.
+        
+        Args:
+            source: Code source C/Pro*C
+        """
         for func_name, (replacement, severity_str, reason) in self.DANGEROUS_FUNCTIONS.items():
-            # Pattern pour appel de fonction
             pattern = re.compile(rf'\b{func_name}\s*\(', re.IGNORECASE)
             
             for match in pattern.finditer(source):
@@ -323,9 +343,12 @@ class MemoryAnalyzer:
                     'INFO': MemorySeverity.INFO,
                 }.get(severity_str, MemorySeverity.WARNING)
                 
+                issue_type = MemoryIssueType.DANGEROUS_FUNCTION
+                if severity == MemorySeverity.CRITICAL:
+                    issue_type = MemoryIssueType.BUFFER_OVERFLOW
+                
                 self.result.issues.append(MemoryIssue(
-                    issue_type=MemoryIssueType.DANGEROUS_FUNCTION if severity != MemorySeverity.CRITICAL 
-                               else MemoryIssueType.BUFFER_OVERFLOW,
+                    issue_type=issue_type,
                     severity=severity,
                     line_number=line_num,
                     message=f"Utilisation de {func_name}() - {reason}",
@@ -336,8 +359,12 @@ class MemoryAnalyzer:
                 self.result.dangerous_calls.append((func_name, line_num))
     
     def _check_sizeof_pointer(self, source: str) -> None:
-        """Détecte sizeof() sur un pointeur au lieu du type"""
-        # Pattern simplifié: malloc(sizeof(ptr)) où ptr est probablement un pointeur
+        """
+        Détecte sizeof() sur un pointeur au lieu du type.
+        
+        Args:
+            source: Code source C/Pro*C
+        """
         pattern = re.compile(
             r'(malloc|calloc)\s*\([^)]*sizeof\s*\(\s*(\w+)\s*\)\s*\)',
             re.IGNORECASE
@@ -347,7 +374,6 @@ class MemoryAnalyzer:
             var_name = match.group(2)
             line_num = get_line_number_from_position(source, match.start())
             
-            # Vérifier si c'est un pointeur (heuristique: chercher la déclaration)
             decl_pattern = re.compile(rf'\b\w+\s*\*+\s*{var_name}\b')
             if decl_pattern.search(source[:match.start()]):
                 self.result.issues.append(MemoryIssue(
@@ -360,7 +386,12 @@ class MemoryAnalyzer:
                 ))
     
     def _report_unfreed_allocations(self) -> None:
-        """Signale les allocations sans free correspondant"""
+        """
+        Signale les allocations sans free correspondant.
+        
+        Détecte les fuites mémoire potentielles en vérifiant que chaque
+        allocation a un free() correspondant.
+        """
         for var_name, alloc_info in self._allocations.items():
             if not alloc_info.has_free:
                 self.result.issues.append(MemoryIssue(

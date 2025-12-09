@@ -20,7 +20,21 @@ from .memory import MemoryAnalyzer, MemoryAnalysisResult, MemoryIssue
 
 @dataclass
 class FunctionMetrics:
-    """Métriques pour une fonction"""
+    """
+    Métriques pour une fonction.
+    
+    Attributes:
+        name: Nom de la fonction
+        start_line: Numéro de ligne de début (1-indexed)
+        end_line: Numéro de ligne de fin (1-indexed)
+        line_count: Nombre de lignes de la fonction
+        cyclomatic_complexity: Complexité cyclomatique (McCabe)
+        cognitive_complexity: Complexité cognitive (SonarSource)
+        sql_blocks_count: Nombre de blocs SQL dans la fonction
+        parameters_count: Nombre de paramètres
+        return_type: Type de retour de la fonction
+        halstead: Métriques Halstead (optionnel)
+    """
     name: str
     start_line: int
     end_line: int
@@ -30,9 +44,7 @@ class FunctionMetrics:
     sql_blocks_count: int = 0
     parameters_count: int = 0
     return_type: str = "void"
-    
-    # Halstead
-    halstead: Optional[Dict] = None
+    halstead: Optional[Dict[str, Any]] = None
     
     def to_dict(self) -> dict:
         result = {
@@ -53,7 +65,22 @@ class FunctionMetrics:
 
 @dataclass
 class FileMetrics:
-    """Métriques pour un fichier"""
+    """
+    Métriques pour un fichier Pro*C.
+    
+    Attributes:
+        filepath: Chemin du fichier analysé
+        total_lines: Nombre total de lignes
+        non_empty_lines: Nombre de lignes non vides
+        functions: Liste des métriques des fonctions
+        sql_statistics: Statistiques sur les blocs SQL trouvés
+        parse_errors: Indique si des erreurs de parsing ont été détectées
+        error_message: Message d'erreur si parse_errors est True
+        module_info: Informations sur le module (titre, description, etc.)
+        todos: Liste des TODO/FIXME trouvés dans le fichier
+        cursor_analysis: Résultat de l'analyse des curseurs SQL
+        memory_analysis: Résultat de l'analyse de sécurité mémoire
+    """
     filepath: str
     total_lines: int
     non_empty_lines: int
@@ -61,8 +88,6 @@ class FileMetrics:
     sql_statistics: Dict[str, Any] = field(default_factory=dict)
     parse_errors: bool = False
     error_message: str = ""
-    
-    # Nouvelles métriques
     module_info: Optional[Dict[str, Any]] = None
     todos: List[Dict[str, Any]] = field(default_factory=list)
     cursor_analysis: Optional[Dict[str, Any]] = None
@@ -147,7 +172,13 @@ class FileMetrics:
 
 @dataclass 
 class AnalysisReport:
-    """Rapport d'analyse complet"""
+    """
+    Rapport d'analyse complet pour un projet Pro*C.
+    
+    Attributes:
+        files: Liste des métriques pour chaque fichier analysé
+        module_inventory: Inventaire des modules du projet (si activé)
+    """
     files: List[FileMetrics] = field(default_factory=list)
     module_inventory: Optional[Dict[str, Any]] = None
     
@@ -206,7 +237,16 @@ class AnalysisReport:
         cyclo_threshold: int = 10, 
         cognitive_threshold: int = 15
     ) -> List[tuple]:
-        """Retourne les fonctions dépassant les seuils"""
+        """
+        Retourne les fonctions dépassant les seuils de complexité.
+        
+        Args:
+            cyclo_threshold: Seuil de complexité cyclomatique
+            cognitive_threshold: Seuil de complexité cognitive
+            
+        Returns:
+            Liste de tuples (filepath, FunctionMetrics) pour les fonctions à risque
+        """
         results = []
         for file in self.files:
             for func in file.functions:
@@ -216,7 +256,12 @@ class AnalysisReport:
         return results
     
     def get_all_todos(self) -> List[tuple]:
-        """Retourne tous les TODOs avec leur fichier"""
+        """
+        Retourne tous les TODOs/FIXME avec leur fichier.
+        
+        Returns:
+            Liste de tuples (filepath, todo_dict) pour tous les TODOs
+        """
         results = []
         for file in self.files:
             for todo in file.todos:
@@ -224,7 +269,12 @@ class AnalysisReport:
         return results
     
     def get_all_cursor_issues(self) -> List[tuple]:
-        """Retourne tous les problèmes de curseurs"""
+        """
+        Retourne tous les problèmes de curseurs SQL détectés.
+        
+        Returns:
+            Liste de tuples (filepath, issue_dict) pour tous les problèmes
+        """
         results = []
         for file in self.files:
             if file.cursor_analysis and 'issues' in file.cursor_analysis:
@@ -233,7 +283,12 @@ class AnalysisReport:
         return results
     
     def get_all_memory_issues(self) -> List[tuple]:
-        """Retourne tous les problèmes mémoire"""
+        """
+        Retourne tous les problèmes de sécurité mémoire détectés.
+        
+        Returns:
+            Liste de tuples (filepath, issue_dict) pour tous les problèmes
+        """
         results = []
         for file in self.files:
             if file.memory_analysis and 'issues' in file.memory_analysis:
@@ -266,8 +321,12 @@ class AnalysisReport:
         return json.dumps(self.to_dict(), indent=indent, ensure_ascii=False)
     
     def to_csv_rows(self) -> Iterator[List[str]]:
-        """Génère les lignes CSV pour export"""
-        # Header
+        """
+        Génère les lignes CSV pour export.
+        
+        Yields:
+            Lignes CSV, la première étant l'en-tête
+        """
         yield [
             'file', 'function', 'start_line', 'end_line', 'lines',
             'cyclomatic', 'cognitive', 'sql_blocks', 'params', 'return_type',
@@ -298,21 +357,26 @@ class ProCAnalyzer:
     """
     Analyseur statique pour code Pro*C.
     
-    Usage:
-        analyzer = ProCAnalyzer()
-        report = analyzer.analyze_file('program.pc')
-        # ou
-        report = analyzer.analyze_directory('./src', pattern='*.pc')
-        # ou avec plusieurs patterns
-        report = analyzer.analyze_directory('./src', patterns=['*.pc', '*.sc', '*.inc'])
-        
-    Options:
-        analyzer = ProCAnalyzer(
-            enable_halstead=True,
-            enable_todos=True,
-            enable_cursors=True,
-            enable_memory=True,
-        )
+    Orchestre le prétraitement, le parsing et le calcul des métriques
+    (complexité cyclomatique, cognitive, Halstead, TODO/FIXME, curseurs, mémoire).
+    
+    Attributes:
+        preprocessor: Préprocesseur pour neutraliser les blocs EXEC SQL
+        parser: Parser C utilisant tree-sitter
+        enable_halstead: Active le calcul des métriques Halstead
+        enable_todos: Active la détection des TODO/FIXME
+        enable_cursors: Active l'analyse des curseurs SQL
+        enable_memory: Active l'analyse de sécurité mémoire
+        module_inventory: Inventaire des modules du projet
+    
+    Example:
+        >>> analyzer = ProCAnalyzer()
+        >>> report = analyzer.analyze_file('program.pc')
+        >>> # ou pour un répertoire avec plusieurs patterns
+        >>> report = analyzer.analyze_directory(
+        ...     './src', 
+        ...     patterns=['*.pc', '*.sc', '*.inc']
+        ... )
     """
     
     def __init__(
@@ -322,16 +386,21 @@ class ProCAnalyzer:
         enable_cursors: bool = True,
         enable_memory: bool = True,
     ) -> None:
+        """
+        Initialise l'analyseur Pro*C.
+        
+        Args:
+            enable_halstead: Active le calcul des métriques Halstead
+            enable_todos: Active la détection des TODO/FIXME
+            enable_cursors: Active l'analyse des curseurs SQL
+            enable_memory: Active l'analyse de sécurité mémoire
+        """
         self.preprocessor = ProCPreprocessor()
         self.parser = ProCParser()
-        
-        # Options d'analyse
         self.enable_halstead = enable_halstead
         self.enable_todos = enable_todos
         self.enable_cursors = enable_cursors
         self.enable_memory = enable_memory
-        
-        # Inventaire des modules
         self.module_inventory = ModuleInventory()
     
     def _create_function_metrics(
@@ -355,7 +424,6 @@ class ProCAnalyzer:
         Returns:
             Métriques de la fonction
         """
-        # Compter les blocs SQL dans cette fonction
         sql_blocks_in_function = sum(
             1 for block in sql_blocks
             if func.start_line <= block.line_number <= func.end_line
@@ -373,7 +441,6 @@ class ProCAnalyzer:
             return_type=func.return_type,
         )
         
-        # Halstead (optionnel)
         if halstead_calc:
             halstead_metrics = halstead_calc.calculate(func)
             func_metrics.halstead = halstead_metrics.to_dict()
@@ -398,39 +465,31 @@ class ProCAnalyzer:
         )
         
         try:
-            # Prétraitement: neutraliser EXEC SQL
             processed_source, sql_blocks = self.preprocessor.preprocess(source)
             metrics.sql_statistics = self.preprocessor.get_sql_statistics()
             
-            # Parsing
             self.parser.parse(processed_source)
             metrics.parse_errors = self.parser.has_errors
             
-            # Calculateurs de base
             cyclo_calc = CyclomaticCalculator(self.parser)
             cognitive_calc = CognitiveCalculator(self.parser)
             
-            # Halstead (optionnel)
             halstead_calc = None
             if self.enable_halstead:
                 halstead_calc = HalsteadCalculator(self.parser)
             
-            # Analyser chaque fonction
             for func in self.parser.get_functions():
                 func_metrics = self._create_function_metrics(
                     func, sql_blocks, cyclo_calc, cognitive_calc, halstead_calc
                 )
                 metrics.functions.append(func_metrics)
             
-            # Analyses supplémentaires
             self._analyze_additional_metrics(source, filepath, metrics)
                 
         except (ValueError, TypeError, AttributeError, KeyError) as e:
-            # Erreurs de parsing ou de structure de données
             metrics.parse_errors = True
             metrics.error_message = f"Erreur d'analyse: {type(e).__name__}: {str(e)}"
         except Exception as e:
-            # Erreurs inattendues - on les capture mais avec un message plus détaillé
             metrics.parse_errors = True
             metrics.error_message = f"Erreur inattendue lors de l'analyse: {type(e).__name__}: {str(e)}"
         
@@ -447,23 +506,18 @@ class ProCAnalyzer:
             filepath: Chemin du fichier
             metrics: Métriques du fichier à enrichir
         """
-        # Analyse des commentaires et TODOs
         if self.enable_todos:
             comment_analyzer = CommentAnalyzer()
             todos, module_info = comment_analyzer.analyze(source, filepath)
             metrics.todos = [t.to_dict() for t in todos]
             metrics.module_info = module_info.to_dict()
-            
-            # Ajouter au module inventory
             self.module_inventory.add_module(module_info)
         
-        # Analyse des curseurs SQL
         if self.enable_cursors:
             cursor_analyzer = CursorAnalyzer()
             cursor_result = cursor_analyzer.analyze(source)
             metrics.cursor_analysis = cursor_result.to_dict()
         
-        # Analyse mémoire
         if self.enable_memory:
             memory_analyzer = MemoryAnalyzer()
             memory_result = memory_analyzer.analyze(source)
@@ -525,7 +579,6 @@ class ProCAnalyzer:
         Returns:
             Rapport d'analyse complet
         """
-        # Reset l'inventaire pour cette analyse
         self.module_inventory = ModuleInventory()
         
         report = AnalysisReport()
@@ -534,7 +587,6 @@ class ProCAnalyzer:
         if not path.exists():
             return report
         
-        # Déterminer les patterns à utiliser
         if patterns is not None:
             patterns_list = patterns
         elif pattern is not None:
@@ -542,7 +594,6 @@ class ProCAnalyzer:
         else:
             patterns_list = ["*.pc"]
         
-        # Collecter tous les fichiers correspondant aux différents patterns
         files_set: Set[Path] = set()
         for pat in patterns_list:
             if recursive:
@@ -551,19 +602,16 @@ class ProCAnalyzer:
                 files = path.glob(pat)
             files_set.update(f for f in files if f.is_file())
         
-        # Convertir en liste triée pour avoir un ordre déterministe
         file_list = sorted(files_set)
         total_files = len(file_list)
         
         for index, filepath in enumerate(file_list, 1):
-            # Appeler le callback de progression si fourni
             if progress_callback:
                 progress_callback(str(filepath), index, total_files)
             
             metrics = self.analyze_file(str(filepath))
             report.files.append(metrics)
         
-        # Ajouter l'inventaire des modules
         if self.enable_todos:
             report.module_inventory = self.module_inventory.to_dict()
         
@@ -579,7 +627,6 @@ class ProCAnalyzer:
         Returns:
             Rapport d'analyse complet
         """
-        # Reset l'inventaire
         self.module_inventory = ModuleInventory()
         
         report = AnalysisReport()
@@ -588,7 +635,6 @@ class ProCAnalyzer:
             metrics = self.analyze_file(filepath)
             report.files.append(metrics)
         
-        # Ajouter l'inventaire des modules
         if self.enable_todos:
             report.module_inventory = self.module_inventory.to_dict()
         

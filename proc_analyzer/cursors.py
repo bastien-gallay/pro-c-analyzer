@@ -174,16 +174,9 @@ class CursorAnalyzer:
         self._prepared_stmts = set()
         self._lines = source.split('\n')
         
-        # 1. Trouver les PREPARE (pour curseurs dynamiques)
         self._find_prepared_statements(source)
-        
-        # 2. Trouver les DECLARE CURSOR
         self._find_cursor_declarations(source)
-        
-        # 3. Trouver les OPEN/FETCH/CLOSE
         self._find_cursor_operations(source)
-        
-        # 4. Analyser les problèmes
         self._analyze_issues(source)
         
         self.result.cursors = list(self._cursor_map.values())
@@ -191,14 +184,23 @@ class CursorAnalyzer:
     
     
     def _find_prepared_statements(self, source: str) -> None:
-        """Trouve les statements préparés"""
+        """
+        Trouve les statements préparés pour curseurs dynamiques.
+        
+        Args:
+            source: Code source Pro*C
+        """
         for match in self.PREPARE_STMT.finditer(source):
             stmt_name = match.group(1).lower()
             self._prepared_stmts.add(stmt_name)
     
     def _find_cursor_declarations(self, source: str) -> None:
-        """Trouve les déclarations de curseurs"""
-        # Curseurs statiques
+        """
+        Trouve les déclarations de curseurs (statiques et dynamiques).
+        
+        Args:
+            source: Code source Pro*C
+        """
         for match in self.DECLARE_CURSOR.finditer(source):
             cursor_name = match.group(1).lower()
             select_stmt = match.group(2).strip()
@@ -212,7 +214,6 @@ class CursorAnalyzer:
             )
             self._cursor_map[cursor_name] = cursor
         
-        # Curseurs dynamiques
         for match in self.DECLARE_DYNAMIC.finditer(source):
             cursor_name = match.group(1).lower()
             stmt_name = match.group(2).lower()
@@ -227,8 +228,12 @@ class CursorAnalyzer:
                 self._cursor_map[cursor_name] = cursor
     
     def _find_cursor_operations(self, source: str) -> None:
-        """Trouve les opérations OPEN/FETCH/CLOSE"""
-        # OPEN
+        """
+        Trouve les opérations OPEN/FETCH/CLOSE sur les curseurs.
+        
+        Args:
+            source: Code source Pro*C
+        """
         for match in self.OPEN_CURSOR.finditer(source):
             cursor_name = match.group(1).lower()
             line_num = get_line_number_from_position(source, match.start())
@@ -236,7 +241,6 @@ class CursorAnalyzer:
             if cursor_name in self._cursor_map:
                 self._cursor_map[cursor_name].open_lines.append(line_num)
         
-        # FETCH
         for match in self.FETCH_CURSOR.finditer(source):
             cursor_name = match.group(1).lower()
             line_num = get_line_number_from_position(source, match.start())
@@ -244,7 +248,6 @@ class CursorAnalyzer:
             if cursor_name in self._cursor_map:
                 self._cursor_map[cursor_name].fetch_lines.append(line_num)
         
-        # CLOSE
         for match in self.CLOSE_CURSOR.finditer(source):
             cursor_name = match.group(1).lower()
             line_num = get_line_number_from_position(source, match.start())
@@ -253,10 +256,13 @@ class CursorAnalyzer:
                 self._cursor_map[cursor_name].close_lines.append(line_num)
     
     def _analyze_issues(self, source: str) -> None:
-        """Analyse les problèmes potentiels"""
+        """
+        Analyse les problèmes potentiels avec les curseurs.
         
+        Args:
+            source: Code source Pro*C
+        """
         for cursor_name, cursor in self._cursor_map.items():
-            # Curseur non fermé
             if cursor.open_lines and not cursor.close_lines:
                 self.result.issues.append(CursorIssue(
                     cursor_name=cursor_name,
@@ -266,7 +272,6 @@ class CursorAnalyzer:
                     severity='warning',
                 ))
             
-            # Plus d'OPEN que de CLOSE
             if len(cursor.open_lines) > len(cursor.close_lines):
                 self.result.issues.append(CursorIssue(
                     cursor_name=cursor_name,
@@ -276,20 +281,19 @@ class CursorAnalyzer:
                     severity='warning',
                 ))
         
-        # Détecter les curseurs imbriqués
         self._detect_nested_cursors(source)
-        
-        # Détecter FETCH sans vérification
         self._detect_unchecked_fetch(source)
     
     def _detect_nested_cursors(self, source: str) -> None:
-        """Détecte les curseurs ouverts dans une boucle de FETCH"""
+        """
+        Détecte les curseurs ouverts dans une boucle de FETCH.
         
-        # Trouver les zones de boucle FETCH
+        Args:
+            source: Code source Pro*C
+        """
         fetch_loops = self._find_fetch_loops(source)
         
         for loop_start, loop_end, outer_cursor in fetch_loops:
-            # Chercher des OPEN dans cette zone
             loop_content = source[loop_start:loop_end]
             
             for match in self.OPEN_CURSOR.finditer(loop_content):
@@ -310,18 +314,19 @@ class CursorAnalyzer:
     def _find_fetch_loops(self, source: str) -> List[Tuple[int, int, str]]:
         """
         Trouve les boucles contenant des FETCH.
-        Retourne: [(start, end, cursor_name), ...]
+        
+        Args:
+            source: Code source Pro*C
+            
+        Returns:
+            Liste de tuples (start_pos, end_pos, cursor_name) pour chaque boucle FETCH
         """
         results = []
-        
-        # Chercher les patterns while(1) { ... FETCH ... }
-        # Simplification: on cherche les FETCH et on identifie leur boucle englobante
         
         for match in self.FETCH_CURSOR.finditer(source):
             cursor_name = match.group(1).lower()
             fetch_pos = match.start()
             
-            # Chercher la boucle englobante
             loop_info = self._find_enclosing_loop(source, fetch_pos)
             if loop_info:
                 results.append((loop_info[0], loop_info[1], cursor_name))
@@ -330,14 +335,18 @@ class CursorAnalyzer:
     
     def _find_enclosing_loop(self, source: str, pos: int) -> Optional[Tuple[int, int]]:
         """
-        Trouve la boucle englobant une position.
-        Retourne (start, end) ou None.
+        Trouve la boucle englobant une position donnée.
+        
+        Args:
+            source: Code source Pro*C
+            pos: Position dans le source
+            
+        Returns:
+            Tuple (start_pos, end_pos) si trouvé, None sinon
         """
-        # Recherche simplifiée: remonter pour trouver while/for/do
-        search_start = max(0, pos - 2000)  # Limiter la recherche
+        search_start = max(0, pos - 2000)
         preceding = source[search_start:pos]
         
-        # Chercher le dernier while/for/do
         best_match = None
         best_pos = -1
         
@@ -350,10 +359,8 @@ class CursorAnalyzer:
         if best_match is None:
             return None
         
-        # Trouver la fin de la boucle (accolade fermante correspondante)
         loop_start = search_start + best_pos
         
-        # Compter les accolades
         brace_count = 0
         in_loop = False
         loop_end = len(source)
@@ -371,17 +378,19 @@ class CursorAnalyzer:
         return (loop_start, loop_end)
     
     def _detect_unchecked_fetch(self, source: str) -> None:
-        """Détecte les FETCH sans vérification immédiate de SQLCODE"""
+        """
+        Détecte les FETCH sans vérification immédiate de SQLCODE.
         
+        Args:
+            source: Code source Pro*C
+        """
         for match in self.FETCH_CURSOR.finditer(source):
             cursor_name = match.group(1).lower()
             fetch_end = match.end()
             line_num = get_line_number_from_position(source, match.start())
             
-            # Chercher une vérification SQLCODE dans les 200 caractères suivants
             following = source[fetch_end:fetch_end + 300]
             
-            # Ignorer si on trouve un autre EXEC SQL avant la vérification
             next_exec = re.search(r'EXEC\s+SQL', following, re.IGNORECASE)
             next_check = self.SQLCODE_CHECK.search(following)
             
@@ -394,7 +403,6 @@ class CursorAnalyzer:
                     severity='info',
                 ))
             elif next_exec and next_exec.start() < next_check.start():
-                # Il y a un autre EXEC SQL avant la vérification
                 self.result.issues.append(CursorIssue(
                     cursor_name=cursor_name,
                     issue_type=CursorIssueType.FETCH_WITHOUT_CHECK,

@@ -1,0 +1,11 @@
+{% if files %}
+<h2>Fichiers analysés</h2>
+<div class="file-filter">
+    <input type="text" id="file-filter-input" placeholder="Filtrer par nom de fichier...">
+    <button id="file-filter-reset">Tout afficher</button>
+</div>
+{% for file_data in files %}
+{% include 'file_section.html' %}
+{% endfor %}
+{% endif %}
+

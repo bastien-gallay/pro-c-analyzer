@@ -4,9 +4,11 @@ Formatter HTML pour les rapports d'analyse.
 
 from datetime import datetime
 from pathlib import Path
-from html import escape
+from typing import Dict, List, Any
 
-from ..analyzer import AnalysisReport, FileMetrics, FunctionMetrics
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+from ..analyzer import AnalysisReport, FileMetrics
 
 
 class HTMLFormatter:
@@ -16,6 +18,19 @@ class HTMLFormatter:
     Génère un fichier HTML autonome avec CSS intégré et JavaScript
     minimal pour l'interactivité (tri, filtres).
     """
+    
+    def __init__(self):
+        """Initialise le formatter avec l'environnement Jinja2."""
+        template_dir = Path(__file__).parent / 'templates' / 'html'
+        self.env = Environment(
+            loader=FileSystemLoader(str(template_dir)),
+            autoescape=select_autoescape(['html', 'xml'])
+        )
+        
+        # Charger les fichiers statiques
+        static_dir = template_dir / 'static'
+        self.css_content = (static_dir / 'styles.css').read_text(encoding='utf-8')
+        self.js_content = (static_dir / 'script.js').read_text(encoding='utf-8')
     
     def format(self, report: AnalysisReport) -> str:
         """
@@ -27,17 +42,25 @@ class HTMLFormatter:
         Returns:
             Chaîne HTML complète
         """
-        html_parts = [
-            self._html_header(),
-            self._html_body_start(),
-            self._html_summary(report),
-            self._html_files(report),
-            self._html_todos(report),
-            self._html_cursor_issues(report),
-            self._html_memory_issues(report),
-            self._html_footer(),
-        ]
-        return '\n'.join(html_parts)
+        template = self.env.get_template('base.html')
+        
+        # Préparer les données pour les templates
+        todos_data = self._prepare_todos_data(report)
+        memory_data = self._prepare_memory_issues_data(report)
+        
+        context = {
+            'generated_at': datetime.now().strftime('%d/%m/%Y à %H:%M:%S'),
+            'css_content': self.css_content,
+            'js_content': self.js_content,
+            'summary': self._prepare_summary_data(report),
+            'files': self._prepare_files_data(report),
+            'todos_data': todos_data,
+            'cursor_issues': self._prepare_cursor_issues_data(report),
+            'memory_issues': memory_data.get('memory_issues'),
+            'memory_issues_by_severity': memory_data.get('memory_issues_by_severity', {}),
+        }
+        
+        return template.render(**context)
     
     def save(self, report: AnalysisReport, output_path: str) -> None:
         """
@@ -50,839 +73,224 @@ class HTMLFormatter:
         output = Path(output_path)
         output.write_text(self.format(report), encoding='utf-8')
     
-    def _html_header(self) -> str:
-        """Génère l'en-tête HTML avec CSS."""
-        return f"""<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pro*C Static Analyzer - Rapport d'analyse</title>
-    <style>
-        * {{
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }}
+    def _prepare_summary_data(self, report: AnalysisReport) -> Dict[str, Any]:
+        """
+        Prépare les données du résumé pour le template.
         
-        body {{
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background: #f5f5f5;
-            padding: 20px;
-        }}
-        
-        .container {{
-            max-width: 1200px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }}
-        
-        h1 {{
-            color: #2563eb;
-            border-bottom: 3px solid #2563eb;
-            padding-bottom: 10px;
-            margin-bottom: 30px;
-        }}
-        
-        h2 {{
-            color: #1e40af;
-            margin-top: 40px;
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #e5e7eb;
-        }}
-        
-        h3 {{
-            color: #374151;
-            margin-top: 30px;
-            margin-bottom: 15px;
-        }}
-        
-        .summary-grid {{
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }}
-        
-        .summary-card {{
-            background: #f9fafb;
-            padding: 20px;
-            border-radius: 6px;
-            border-left: 4px solid #2563eb;
-            transition: all 0.2s;
-        }}
-        
-        .summary-card.filterable {{
-            cursor: pointer;
-        }}
-        
-        .summary-card.filterable:hover {{
-            background: #f3f4f6;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }}
-        
-        .summary-card.filterable.active {{
-            background: #dbeafe;
-            border-left-color: #1e40af;
-        }}
-        
-        .summary-card h3 {{
-            margin-top: 0;
-            font-size: 0.9em;
-            color: #6b7280;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }}
-        
-        .summary-card.filterable h3::after {{
-            content: ' 👆';
-            font-size: 0.8em;
-            opacity: 0.6;
-        }}
-        
-        .summary-card .value {{
-            font-size: 2em;
-            font-weight: bold;
-            color: #1e40af;
-            margin: 10px 0;
-        }}
-        
-        table {{
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
-            background: white;
-        }}
-        
-        th {{
-            background: #f3f4f6;
-            padding: 12px;
-            text-align: left;
-            font-weight: 600;
-            border-bottom: 2px solid #e5e7eb;
-            cursor: pointer;
-            user-select: none;
-        }}
-        
-        th:hover {{
-            background: #e5e7eb;
-        }}
-        
-        td {{
-            padding: 10px 12px;
-            border-bottom: 1px solid #e5e7eb;
-        }}
-        
-        tr:hover {{
-            background: #f9fafb;
-        }}
-        
-        .badge {{
-            display: inline-block;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.85em;
-            font-weight: 600;
-        }}
-        
-        .badge-low {{
-            background: #d1fae5;
-            color: #065f46;
-        }}
-        
-        .badge-medium {{
-            background: #fef3c7;
-            color: #92400e;
-        }}
-        
-        .badge-high {{
-            background: #fee2e2;
-            color: #991b1b;
-        }}
-        
-        .complexity-low {{
-            color: #059669;
-            font-weight: 600;
-        }}
-        
-        .complexity-medium {{
-            color: #d97706;
-            font-weight: 600;
-        }}
-        
-        .complexity-high {{
-            color: #dc2626;
-            font-weight: 600;
-        }}
-        
-        .file-section {{
-            margin: 30px 0;
-            padding: 20px;
-            background: #f9fafb;
-            border-radius: 6px;
-        }}
-        
-        .file-header {{
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-        }}
-        
-        .file-title {{
-            font-size: 1.2em;
-            font-weight: 600;
-            color: #1e40af;
-            cursor: pointer;
-            user-select: none;
-            transition: color 0.2s;
-        }}
-        
-        .file-title:hover {{
-            color: #3b82f6;
-            text-decoration: underline;
-        }}
-        
-        .file-title.filter-active {{
-            background: #dbeafe;
-            padding: 4px 8px;
-            border-radius: 4px;
-        }}
-        
-        .file-filter {{
-            margin-bottom: 20px;
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }}
-        
-        .file-filter input {{
-            flex: 1;
-            padding: 10px;
-            border: 2px solid #e5e7eb;
-            border-radius: 6px;
-            font-size: 1em;
-        }}
-        
-        .file-filter input:focus {{
-            outline: none;
-            border-color: #2563eb;
-        }}
-        
-        .file-filter button {{
-            padding: 10px 20px;
-            background: #2563eb;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: 500;
-        }}
-        
-        .file-filter button:hover {{
-            background: #1e40af;
-        }}
-        
-        .file-section.hidden {{
-            display: none;
-        }}
-        
-        .collapsible {{
-            background: #f3f4f6;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: 500;
-        }}
-        
-        .collapsible:hover {{
-            background: #e5e7eb;
-        }}
-        
-        .collapsible-content {{
-            display: none;
-        }}
-        
-        .collapsible-content.active {{
-            display: block;
-        }}
-        
-        .issue-list {{
-            list-style: none;
-            margin: 15px 0;
-        }}
-        
-        .issue-item {{
-            padding: 10px;
-            margin: 8px 0;
-            border-left: 4px solid #e5e7eb;
-            background: white;
-            border-radius: 4px;
-        }}
-        
-        .issue-item.error {{
-            border-left-color: #dc2626;
-        }}
-        
-        .issue-item.warning {{
-            border-left-color: #d97706;
-        }}
-        
-        .issue-item.info {{
-            border-left-color: #2563eb;
-        }}
-        
-        .issue-location {{
-            font-family: monospace;
-            font-size: 0.9em;
-            color: #6b7280;
-        }}
-        
-        .footer {{
-            margin-top: 40px;
-            padding-top: 20px;
-            border-top: 2px solid #e5e7eb;
-            text-align: center;
-            color: #6b7280;
-            font-size: 0.9em;
-        }}
-    </style>
-</head>"""
+        Args:
+            report: Rapport d'analyse
+            
+        Returns:
+            Dictionnaire avec les données du résumé
+        """
+        return {
+            'total_files': report.total_files,
+            'total_functions': report.total_functions,
+            'total_lines': report.total_lines,
+            'total_lines_formatted': f'{report.total_lines:,}',
+            'avg_cyclomatic': report.avg_cyclomatic,
+            'avg_cognitive': report.avg_cognitive,
+            'total_todos': report.total_todos,
+            'total_cursor_issues': report.total_cursor_issues,
+            'total_memory_issues': report.total_memory_issues,
+        }
     
-    def _html_body_start(self) -> str:
-        """Début du body HTML."""
-        return """<body>
-    <div class="container">"""
-    
-    def _html_footer(self) -> str:
-        """Pied de page HTML avec JavaScript."""
-        return f"""    </div>
-    <script>
-        // Toggle collapsible sections
-        document.querySelectorAll('.collapsible').forEach(button => {{
-            button.addEventListener('click', function() {{
-                // Le contenu collapsible est le nextElementSibling du parent (file-header)
-                const header = this.closest('.file-header');
-                const content = header ? header.nextElementSibling : null;
-                if (content && content.classList.contains('collapsible-content')) {{
-                    content.classList.toggle('active');
-                    this.textContent = content.classList.contains('active') ? 'Masquer' : 'Afficher';
-                }}
-            }});
-        }});
+    def _prepare_files_data(self, report: AnalysisReport) -> List[Dict[str, Any]]:
+        """
+        Prépare les données des fichiers pour le template.
         
-        // Simple table sorting
-        document.querySelectorAll('th').forEach(header => {{
-            header.addEventListener('click', function() {{
-                const table = this.closest('table');
-                const tbody = table.querySelector('tbody');
-                const rows = Array.from(tbody.querySelectorAll('tr'));
-                const columnIndex = Array.from(this.parentElement.children).indexOf(this);
-                const isAsc = this.classList.contains('asc');
-                
-                // Reset all headers
-                table.querySelectorAll('th').forEach(th => th.classList.remove('asc', 'desc'));
-                this.classList.add(isAsc ? 'desc' : 'asc');
-                
-                rows.sort((a, b) => {{
-                    const aText = a.children[columnIndex].textContent.trim();
-                    const bText = b.children[columnIndex].textContent.trim();
-                    const aNum = parseFloat(aText);
-                    const bNum = parseFloat(bText);
-                    
-                    if (!isNaN(aNum) && !isNaN(bNum)) {{
-                        return isAsc ? bNum - aNum : aNum - bNum;
-                    }}
-                    return isAsc ? bText.localeCompare(aText) : aText.localeCompare(bText);
-                }});
-                
-                rows.forEach(row => tbody.appendChild(row));
-            }});
-        }});
-        
-        // File filtering functionality
-        let currentFilter = '';
-        let currentFilterType = '';
-        
-        function filterFiles(filterText) {{
-            currentFilter = filterText.toLowerCase().trim();
-            currentFilterType = '';
-            const fileSections = document.querySelectorAll('.file-section');
-            const fileTitles = document.querySelectorAll('.file-title');
+        Args:
+            report: Rapport d'analyse
             
-            // Reset summary cards
-            document.querySelectorAll('.summary-card').forEach(card => {{
-                card.classList.remove('active');
-            }});
-            
-            fileSections.forEach(section => {{
-                const title = section.querySelector('.file-title');
-                const fileName = title ? title.textContent.toLowerCase() : '';
-                
-                if (currentFilter === '' || fileName.includes(currentFilter)) {{
-                    section.style.display = '';
-                    if (title && currentFilter !== '') {{
-                        title.classList.add('filter-active');
-                    }} else if (title) {{
-                        title.classList.remove('filter-active');
-                    }}
-                }} else {{
-                    section.style.display = 'none';
-                    if (title) {{
-                        title.classList.remove('filter-active');
-                    }}
-                }}
-            }});
-        }}
-        
-        function filterFilesByType(filterType) {{
-            currentFilterType = filterType;
-            currentFilter = '';
-            const fileSections = document.querySelectorAll('.file-section');
-            
-            // Reset summary cards
-            document.querySelectorAll('.summary-card').forEach(card => {{
-                card.classList.remove('active');
-            }});
-            
-            // Activate clicked card
-            const clickedCard = document.querySelector(`[data-filter-type="${{filterType}}"]`);
-            if (clickedCard) {{
-                clickedCard.classList.add('active');
-            }}
-            
-            // Reset filter input
-            const filterInput = document.getElementById('file-filter-input');
-            if (filterInput) {{
-                filterInput.value = '';
-            }}
-            
-            fileSections.forEach(section => {{
-                let shouldShow = false;
-                
-                switch(filterType) {{
-                    case 'todos':
-                        shouldShow = section.dataset.hasTodos === 'true';
-                        break;
-                    case 'cursor-issues':
-                        shouldShow = section.dataset.hasCursorIssues === 'true';
-                        break;
-                    case 'memory-issues':
-                        shouldShow = section.dataset.hasMemoryIssues === 'true';
-                        break;
-                    case 'high-complexity':
-                        const avgCyclo = parseFloat(section.dataset.avgCyclomatic || '0');
-                        shouldShow = avgCyclo > 5;
-                        break;
-                    case 'high-cognitive':
-                        const avgCogn = parseFloat(section.dataset.avgCognitive || '0');
-                        shouldShow = avgCogn > 8;
-                        break;
-                    default:
-                        shouldShow = true;
-                }}
-                
-                section.style.display = shouldShow ? '' : 'none';
-                
-                const title = section.querySelector('.file-title');
-                if (title) {{
-                    if (shouldShow) {{
-                        title.classList.add('filter-active');
-                    }} else {{
-                        title.classList.remove('filter-active');
-                    }}
-                }}
-            }});
-        }}
-        
-        // Filter input handler
-        const filterInput = document.getElementById('file-filter-input');
-        if (filterInput) {{
-            filterInput.addEventListener('input', function() {{
-                filterFiles(this.value);
-            }});
-        }}
-        
-        // Reset filter button
-        const resetButton = document.getElementById('file-filter-reset');
-        if (resetButton) {{
-            resetButton.addEventListener('click', function() {{
-                if (filterInput) {{
-                    filterInput.value = '';
-                }}
-                currentFilterType = '';
-                document.querySelectorAll('.summary-card').forEach(card => {{
-                    card.classList.remove('active');
-                }});
-                document.querySelectorAll('.file-section').forEach(section => {{
-                    section.style.display = '';
-                    const title = section.querySelector('.file-title');
-                    if (title) {{
-                        title.classList.remove('filter-active');
-                    }}
-                }});
-            }});
-        }}
-        
-        // Click on file title to filter
-        document.querySelectorAll('.file-title').forEach(title => {{
-            title.addEventListener('click', function(e) {{
-                // Ne pas déclencher si on clique sur le bouton collapsible
-                if (e.target.closest('.collapsible')) {{
-                    return;
-                }}
-                
-                // Reset filter type first
-                currentFilterType = '';
-                document.querySelectorAll('.summary-card').forEach(card => {{
-                    card.classList.remove('active');
-                }});
-                
-                const fileName = this.textContent.replace(/^📄\\s+/, '').trim();
-                if (filterInput) {{
-                    filterInput.value = fileName;
-                }}
-                filterFiles(fileName);
-            }});
-        }});
-        
-        // Click on summary cards to filter
-        document.querySelectorAll('.summary-card.filterable').forEach(card => {{
-            card.addEventListener('click', function() {{
-                const filterType = this.dataset.filterType;
-                if (filterType) {{
-                    filterFilesByType(filterType);
-                }}
-            }});
-        }});
-    </script>
-</body>
-</html>"""
-    
-    def _html_summary(self, report: AnalysisReport) -> str:
-        """Génère la section résumé."""
-        return f"""        <h1>Pro*C Static Analyzer - Rapport d'analyse</h1>
-        <p style="color: #6b7280; margin-bottom: 30px;">Généré le {datetime.now().strftime('%d/%m/%Y à %H:%M:%S')}</p>
-        
-        <h2>Résumé</h2>
-        <div class="summary-grid">
-            <div class="summary-card">
-                <h3>Fichiers analysés</h3>
-                <div class="value">{report.total_files}</div>
-            </div>
-            <div class="summary-card">
-                <h3>Fonctions totales</h3>
-                <div class="value">{report.total_functions}</div>
-            </div>
-            <div class="summary-card">
-                <h3>Lignes de code</h3>
-                <div class="value">{report.total_lines:,}</div>
-            </div>
-            <div class="summary-card filterable" data-filter-type="high-complexity" title="Cliquer pour filtrer les fichiers avec complexité cyclomatique élevée">
-                <h3>Complexité cyclomatique moyenne</h3>
-                <div class="value">{report.avg_cyclomatic:.2f}</div>
-            </div>
-            <div class="summary-card filterable" data-filter-type="high-cognitive" title="Cliquer pour filtrer les fichiers avec complexité cognitive élevée">
-                <h3>Complexité cognitive moyenne</h3>
-                <div class="value">{report.avg_cognitive:.2f}</div>
-            </div>
-            <div class="summary-card filterable" data-filter-type="todos" title="Cliquer pour filtrer les fichiers avec TODO/FIXME">
-                <h3>TODO/FIXME</h3>
-                <div class="value">{report.total_todos}</div>
-            </div>
-            <div class="summary-card filterable" data-filter-type="cursor-issues" title="Cliquer pour filtrer les fichiers avec problèmes de curseurs">
-                <h3>Problèmes curseurs</h3>
-                <div class="value">{report.total_cursor_issues}</div>
-            </div>
-            <div class="summary-card filterable" data-filter-type="memory-issues" title="Cliquer pour filtrer les fichiers avec problèmes mémoire">
-                <h3>Problèmes mémoire</h3>
-                <div class="value">{report.total_memory_issues}</div>
-            </div>
-        </div>"""
-    
-    def _html_files(self, report: AnalysisReport) -> str:
-        """Génère la section des fichiers."""
-        if not report.files:
-            return ""
-        
-        parts = [
-            '<h2>Fichiers analysés</h2>',
-            '<div class="file-filter">',
-            '<input type="text" id="file-filter-input" placeholder="Filtrer par nom de fichier...">',
-            '<button id="file-filter-reset">Tout afficher</button>',
-            '</div>'
-        ]
-        
+        Returns:
+            Liste de dictionnaires avec les données de chaque fichier
+        """
+        files_data = []
         for file_metrics in report.files:
-            parts.append(self._html_file_section(file_metrics))
-        
-        return '\n'.join(parts)
+            files_data.append(self._prepare_file_data(file_metrics))
+        return files_data
     
-    def _html_file_section(self, metrics: FileMetrics) -> str:
-        """Génère la section HTML pour un fichier."""
+    def _prepare_file_data(self, metrics: FileMetrics) -> Dict[str, Any]:
+        """
+        Prépare les données d'un fichier pour le template.
+        
+        Args:
+            metrics: Métriques du fichier
+            
+        Returns:
+            Dictionnaire avec les données du fichier
+        """
         file_name = Path(metrics.filepath).name
-        has_todos = 'true' if metrics.todos else 'false'
-        has_cursor_issues = 'true' if (metrics.cursor_analysis and metrics.cursor_analysis.get('issues')) else 'false'
-        has_memory_issues = 'true' if (metrics.memory_analysis and metrics.memory_analysis.get('issues')) else 'false'
-        avg_cyclomatic = f'{metrics.avg_cyclomatic:.2f}'
-        avg_cognitive = f'{metrics.avg_cognitive:.2f}'
         
-        parts = [
-            f'<div class="file-section" data-filename="{escape(file_name)}" '
-            f'data-has-todos="{has_todos}" '
-            f'data-has-cursor-issues="{has_cursor_issues}" '
-            f'data-has-memory-issues="{has_memory_issues}" '
-            f'data-avg-cyclomatic="{avg_cyclomatic}" '
-            f'data-avg-cognitive="{avg_cognitive}">',
-            f'<div class="file-header">',
-            f'<div class="file-title" title="Cliquer pour filtrer par ce fichier">📄 {escape(file_name)}</div>',
-            f'<button class="collapsible">Afficher</button>',
-            f'</div>',
-            f'<div class="collapsible-content">',
-        ]
+        # Préparer les fonctions
+        functions_data = []
+        for func in metrics.functions:
+            functions_data.append({
+                'name': func.name,
+                'start_line': func.start_line,
+                'line_count': func.line_count,
+                'cyclomatic_complexity': func.cyclomatic_complexity,
+                'cognitive_complexity': func.cognitive_complexity,
+                'sql_blocks_count': func.sql_blocks_count,
+                'cyclo_class': self._complexity_class(func.cyclomatic_complexity, 5, 10),
+                'cogn_class': self._complexity_class(func.cognitive_complexity, 8, 15),
+            })
         
-        # Stats générales
-        parts.append('<p>')
-        parts.append(f'<strong>Lignes:</strong> {metrics.total_lines} (non vides: {metrics.non_empty_lines})<br>')
-        parts.append(f'<strong>Fonctions:</strong> {metrics.function_count}<br>')
-        parts.append(f'<strong>Blocs SQL:</strong> {metrics.total_sql_blocks}<br>')
+        # Grouper les TODOs par priorité
+        todos_by_priority = {'high': [], 'medium': [], 'low': []}
         if metrics.todos:
-            high_todos = sum(1 for t in metrics.todos if t.get('priority') == 'high')
-            parts.append(f'<strong>TODO/FIXME:</strong> {len(metrics.todos)} ({high_todos} haute priorité)<br>')
-        parts.append('</p>')
-        
-        # Tableau des fonctions
-        if metrics.functions:
-            parts.append('<h3>Fonctions</h3>')
-            parts.append('<table>')
-            parts.append('<thead><tr>')
-            parts.append('<th>Fonction</th><th>Lignes</th><th>Cyclo</th><th>Cogn</th><th>SQL</th>')
-            parts.append('</tr></thead>')
-            parts.append('<tbody>')
-            
-            for func in metrics.functions:
-                cyclo_class = self._complexity_class(func.cyclomatic_complexity, 5, 10)
-                cogn_class = self._complexity_class(func.cognitive_complexity, 8, 15)
-                
-                parts.append('<tr>')
-                parts.append(f'<td><code>{escape(func.name)}</code> (L{func.start_line})</td>')
-                parts.append(f'<td>{func.line_count}</td>')
-                parts.append(f'<td class="{cyclo_class}">{func.cyclomatic_complexity}</td>')
-                parts.append(f'<td class="{cogn_class}">{func.cognitive_complexity}</td>')
-                parts.append(f'<td>{func.sql_blocks_count}</td>')
-                parts.append('</tr>')
-            
-            parts.append('</tbody></table>')
-        
-        # TODOs pour ce fichier
-        if metrics.todos:
-            parts.append('<h3>📝 TODO/FIXME</h3>')
-            parts.append('<ul class="issue-list">')
-            
-            # Grouper par priorité
-            by_priority = {'high': [], 'medium': [], 'low': []}
             for todo in metrics.todos:
                 priority = todo.get('priority', 'low')
-                by_priority[priority].append(todo)
-            
-            for priority in ['high', 'medium', 'low']:
-                items = by_priority[priority]
-                if not items:
-                    continue
-                
-                badge_class = f'badge-{priority}'
-                for todo in items:
-                    tag = todo.get('tag', 'TODO')
-                    msg = escape(todo.get('message', ''))
-                    line = todo.get('line_number', 0)
-                    
-                    parts.append('<li class="issue-item">')
-                    parts.append(f'<span class="badge {badge_class}">{priority.upper()}</span> ')
-                    parts.append(f'<strong>{tag}</strong> <span class="issue-location">L{line}</span><br>')
-                    parts.append(f'{msg}')
-                    parts.append('</li>')
-            
-            parts.append('</ul>')
+                todos_by_priority[priority].append({
+                    'tag': todo.get('tag', 'TODO'),
+                    'message': todo.get('message', ''),
+                    'line_number': todo.get('line_number', 0),
+                })
         
-        # Problèmes de curseurs pour ce fichier
+        # Préparer les problèmes de curseurs
+        cursor_issues = []
         if metrics.cursor_analysis and metrics.cursor_analysis.get('issues'):
-            issues = metrics.cursor_analysis['issues']
-            if issues:
-                parts.append('<h3>🔄 Problèmes de curseurs SQL</h3>')
-                parts.append('<ul class="issue-list">')
-                
-                for issue in issues[:20]:  # Limiter à 20
-                    severity = issue.get('severity', 'info')
-                    cursor = escape(issue.get('cursor_name', '?'))
-                    line = issue.get('line_number', 0)
-                    msg = escape(issue.get('message', ''))
-                    
-                    parts.append(f'<li class="issue-item {severity}">')
-                    parts.append(f'<strong>{severity.upper()}</strong> <span class="issue-location">L{line}</span><br>')
-                    parts.append(f'Curseur: <code>{cursor}</code> - {msg}')
-                    parts.append('</li>')
-                
-                if len(issues) > 20:
-                    parts.append(f'<li><em>... et {len(issues) - 20} autres problèmes</em></li>')
-                
-                parts.append('</ul>')
+            for issue in metrics.cursor_analysis['issues']:
+                cursor_issues.append({
+                    'severity': issue.get('severity', 'info'),
+                    'cursor_name': issue.get('cursor_name', '?'),
+                    'message': issue.get('message', ''),
+                    'line_number': issue.get('line_number', 0),
+                })
         
-        # Problèmes mémoire pour ce fichier
+        # Grouper les problèmes mémoire par sévérité
+        memory_issues_by_severity = {'critical': [], 'error': [], 'warning': [], 'info': []}
         if metrics.memory_analysis and metrics.memory_analysis.get('issues'):
-            issues = metrics.memory_analysis['issues']
-            if issues:
-                parts.append('<h3>🧠 Problèmes de gestion mémoire</h3>')
-                
-                # Grouper par sévérité
-                by_severity = {'critical': [], 'error': [], 'warning': [], 'info': []}
-                for issue in issues:
-                    severity = issue.get('severity', 'info')
-                    by_severity[severity].append(issue)
-                
-                for severity in ['critical', 'error', 'warning']:
-                    items = by_severity[severity]
-                    if not items:
-                        continue
-                    
-                    parts.append(f'<h4><span class="badge badge-{severity}">{severity.upper()}</span> ({len(items)})</h4>')
-                    parts.append('<ul class="issue-list">')
-                    
-                    for issue in items[:15]:  # Limiter à 15 par sévérité
-                        line = issue.get('line_number', 0)
-                        msg = escape(issue.get('message', ''))
-                        rec = escape(issue.get('recommendation', ''))
-                        
-                        parts.append(f'<li class="issue-item {severity}">')
-                        parts.append(f'<span class="issue-location">L{line}</span><br>')
-                        parts.append(f'{msg}')
-                        if rec:
-                            parts.append(f'<br><em>→ {rec}</em>')
-                        parts.append('</li>')
-                    
-                    if len(items) > 15:
-                        parts.append(f'<li><em>... et {len(items) - 15} autres</em></li>')
-                    
-                    parts.append('</ul>')
+            for issue in metrics.memory_analysis['issues']:
+                severity = issue.get('severity', 'info')
+                memory_issues_by_severity[severity].append({
+                    'message': issue.get('message', ''),
+                    'line_number': issue.get('line_number', 0),
+                    'recommendation': issue.get('recommendation', ''),
+                })
         
-        parts.extend(['</div>', '</div>'])
-        return '\n'.join(parts)
+        return {
+            'filename': file_name,
+            'has_todos': 'true' if metrics.todos else 'false',
+            'has_cursor_issues': 'true' if (metrics.cursor_analysis and metrics.cursor_analysis.get('issues')) else 'false',
+            'has_memory_issues': 'true' if (metrics.memory_analysis and metrics.memory_analysis.get('issues')) else 'false',
+            'avg_cyclomatic': f'{metrics.avg_cyclomatic:.2f}',
+            'avg_cognitive': f'{metrics.avg_cognitive:.2f}',
+            'total_lines': metrics.total_lines,
+            'non_empty_lines': metrics.non_empty_lines,
+            'function_count': metrics.function_count,
+            'total_sql_blocks': metrics.total_sql_blocks,
+            'todos_count': len(metrics.todos) if metrics.todos else 0,
+            'high_todos_count': sum(1 for t in metrics.todos if t.get('priority') == 'high') if metrics.todos else 0,
+            'functions': functions_data,
+            'todos': metrics.todos if metrics.todos else [],
+            'todos_by_priority': todos_by_priority,
+            'cursor_issues': cursor_issues,
+            'memory_issues': metrics.memory_analysis.get('issues', []) if metrics.memory_analysis else [],
+            'memory_issues_by_severity': memory_issues_by_severity,
+        }
     
-    def _html_todos(self, report: AnalysisReport) -> str:
-        """Génère la section TODOs."""
+    def _prepare_todos_data(self, report: AnalysisReport) -> Dict[str, Any]:
+        """
+        Prépare les données TODOs pour le template.
+        
+        Args:
+            report: Rapport d'analyse
+            
+        Returns:
+            Dictionnaire avec les données TODOs
+        """
         todos = report.get_all_todos()
         if not todos:
-            return ""
-        
-        parts = ['<h2>TODO/FIXME</h2>']
+            return {'todos': None, 'todos_by_priority': {'high': [], 'medium': [], 'low': []}}
         
         # Grouper par priorité
-        by_priority = {'high': [], 'medium': [], 'low': []}
+        todos_by_priority = {'high': [], 'medium': [], 'low': []}
         for filepath, todo in todos:
             priority = todo.get('priority', 'low')
-            by_priority[priority].append((filepath, todo))
+            todos_by_priority[priority].append({
+                'filepath': filepath,
+                'filename': Path(filepath).name,
+                'tag': todo.get('tag', 'TODO'),
+                'message': todo.get('message', ''),
+                'line_number': todo.get('line_number', 0),
+            })
         
-        for priority in ['high', 'medium', 'low']:
-            items = by_priority[priority]
-            if not items:
-                continue
-            
-            badge_class = f'badge-{priority}'
-            parts.append(f'<h3><span class="badge {badge_class}">{priority.upper()}</span> ({len(items)})</h3>')
-            parts.append('<ul class="issue-list">')
-            
-            for filepath, todo in items:
-                tag = todo.get('tag', 'TODO')
-                msg = escape(todo.get('message', ''))
-                line = todo.get('line_number', 0)
-                file_name = Path(filepath).name
-                
-                parts.append('<li class="issue-item">')
-                parts.append(f'<strong>{tag}</strong> <span class="issue-location">{file_name}:{line}</span><br>')
-                parts.append(f'{msg}')
-                parts.append('</li>')
-            
-            parts.append('</ul>')
-        
-        return '\n'.join(parts)
+        return {
+            'todos': todos,
+            'todos_by_priority': todos_by_priority,
+        }
     
-    def _html_cursor_issues(self, report: AnalysisReport) -> str:
-        """Génère la section problèmes de curseurs."""
+    def _prepare_cursor_issues_data(self, report: AnalysisReport) -> List[Dict[str, Any]]:
+        """
+        Prépare les données des problèmes de curseurs pour le template.
+        
+        Args:
+            report: Rapport d'analyse
+            
+        Returns:
+            Liste de dictionnaires avec les problèmes de curseurs
+        """
         issues = report.get_all_cursor_issues()
         if not issues:
-            return ""
+            return []
         
-        parts = ['<h2>Problèmes de curseurs SQL</h2>', '<ul class="issue-list">']
+        cursor_issues_data = []
+        for filepath, issue in issues:
+            cursor_issues_data.append({
+                'filepath': filepath,
+                'filename': Path(filepath).name,
+                'severity': issue.get('severity', 'info'),
+                'cursor_name': issue.get('cursor_name', '?'),
+                'message': issue.get('message', ''),
+                'line_number': issue.get('line_number', 0),
+            })
         
-        for filepath, issue in issues[:50]:  # Limiter à 50
-            severity = issue.get('severity', 'info')
-            cursor = escape(issue.get('cursor_name', '?'))
-            line = issue.get('line_number', 0)
-            msg = escape(issue.get('message', ''))
-            file_name = Path(filepath).name
-            
-            parts.append(f'<li class="issue-item {severity}">')
-            parts.append(f'<strong>{severity.upper()}</strong> <span class="issue-location">{file_name}:{line}</span><br>')
-            parts.append(f'Curseur: <code>{cursor}</code> - {msg}')
-            parts.append('</li>')
-        
-        if len(issues) > 50:
-            parts.append(f'<li><em>... et {len(issues) - 50} autres problèmes</em></li>')
-        
-        parts.append('</ul>')
-        return '\n'.join(parts)
+        return cursor_issues_data
     
-    def _html_memory_issues(self, report: AnalysisReport) -> str:
-        """Génère la section problèmes mémoire."""
+    def _prepare_memory_issues_data(self, report: AnalysisReport) -> Dict[str, Any]:
+        """
+        Prépare les données des problèmes mémoire pour le template.
+        
+        Args:
+            report: Rapport d'analyse
+            
+        Returns:
+            Dictionnaire avec les problèmes mémoire groupés par sévérité
+        """
         issues = report.get_all_memory_issues()
         if not issues:
-            return ""
-        
-        parts = ['<h2>Problèmes de gestion mémoire</h2>']
+            return {'memory_issues': None, 'memory_issues_by_severity': {'critical': [], 'error': [], 'warning': [], 'info': []}}
         
         # Grouper par sévérité
-        by_severity = {'critical': [], 'error': [], 'warning': [], 'info': []}
+        memory_issues_by_severity = {'critical': [], 'error': [], 'warning': [], 'info': []}
         for filepath, issue in issues:
             severity = issue.get('severity', 'info')
-            by_severity[severity].append((filepath, issue))
+            memory_issues_by_severity[severity].append({
+                'filepath': filepath,
+                'filename': Path(filepath).name,
+                'message': issue.get('message', ''),
+                'line_number': issue.get('line_number', 0),
+                'recommendation': issue.get('recommendation', ''),
+            })
         
-        for severity in ['critical', 'error', 'warning']:
-            items = by_severity[severity]
-            if not items:
-                continue
-            
-            parts.append(f'<h3><span class="badge badge-{severity}">{severity.upper()}</span> ({len(items)})</h3>')
-            parts.append('<ul class="issue-list">')
-            
-            for filepath, issue in items[:30]:  # Limiter à 30 par sévérité
-                line = issue.get('line_number', 0)
-                msg = escape(issue.get('message', ''))
-                rec = escape(issue.get('recommendation', ''))
-                file_name = Path(filepath).name
-                
-                parts.append(f'<li class="issue-item {severity}">')
-                parts.append(f'<span class="issue-location">{file_name}:{line}</span><br>')
-                parts.append(f'{msg}')
-                if rec:
-                    parts.append(f'<br><em>→ {rec}</em>')
-                parts.append('</li>')
-            
-            if len(items) > 30:
-                parts.append(f'<li><em>... et {len(items) - 30} autres</em></li>')
-            
-            parts.append('</ul>')
-        
-        return '\n'.join(parts)
+        return {
+            'memory_issues': issues,
+            'memory_issues_by_severity': memory_issues_by_severity,
+        }
     
     def _complexity_class(self, value: int, low: int, medium: int) -> str:
-        """Retourne la classe CSS selon la complexité."""
+        """
+        Retourne la classe CSS selon la complexité.
+        
+        Args:
+            value: Valeur de complexité
+            low: Seuil bas
+            medium: Seuil moyen
+            
+        Returns:
+            Classe CSS correspondante
+        """
         if value <= low:
             return 'complexity-low'
         elif value <= medium:

@@ -207,77 +207,120 @@ class CommentAnalyzer:
             self.todos.append(todo)
     
     def _analyze_header(self, source: str) -> None:
-        """Analyse l'entête du fichier pour extraire les métadonnées"""
-        # Chercher le premier bloc de commentaires
-        header_match = self.MULTI_LINE_COMMENT.match(source.lstrip())
-        if not header_match:
-            # Peut-être des commentaires // au début
-            lines = source.split('\n')
-            header_lines = []
-            for line in lines:
-                stripped = line.strip()
-                if stripped.startswith('//'):
-                    header_lines.append(stripped[2:].strip())
-                elif stripped.startswith('/*'):
-                    break
-                elif stripped and not stripped.startswith('#'):
-                    break
-            header_text = '\n'.join(header_lines)
-        else:
-            header_text = header_match.group(1)
+        """
+        Analyse l'entête du fichier pour extraire les métadonnées.
+        
+        Args:
+            source: Code source à analyser
+        """
+        header_text = self._extract_header_text(source)
         
         if not header_text:
             return
         
-        # Extraire les métadonnées
+        self._extract_metadata_from_header(header_text)
+        
+        if not self.module_info.title:
+            self._extract_title_from_header(header_text)
+        
+        if not self.module_info.description:
+            self._extract_description_from_header(header_text)
+    
+    def _extract_header_text(self, source: str) -> str:
+        """
+        Extrait le texte de l'en-tête depuis le code source.
+        
+        Args:
+            source: Code source à analyser
+            
+        Returns:
+            Texte de l'en-tête ou chaîne vide
+        """
+        header_match = self.MULTI_LINE_COMMENT.match(source.lstrip())
+        if header_match:
+            return header_match.group(1)
+        
+        lines = source.split('\n')
+        header_lines = []
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith('//'):
+                header_lines.append(stripped[2:].strip())
+            elif stripped.startswith('/*'):
+                break
+            elif stripped and not stripped.startswith('#'):
+                break
+        return '\n'.join(header_lines)
+    
+    def _extract_metadata_from_header(self, header_text: str) -> None:
+        """
+        Extrait les métadonnées (title, author, date, etc.) depuis l'en-tête.
+        
+        Args:
+            header_text: Texte de l'en-tête
+        """
         for field_name, patterns in self.HEADER_PATTERNS.items():
             for pattern in patterns:
                 match = pattern.search(header_text)
                 if match:
                     value = match.group(1).strip()
-                    # Nettoyer les astérisques de début
                     value = re.sub(r'^\*+\s*', '', value)
                     setattr(self.module_info, field_name, value)
                     break
+    
+    def _extract_title_from_header(self, header_text: str) -> None:
+        """
+        Extrait le titre depuis l'en-tête si pas déjà trouvé.
         
-        # Si pas de titre, utiliser la première ligne non vide
-        if not self.module_info.title:
-            for line in header_text.split('\n'):
-                clean = re.sub(r'^\s*\*?\s*', '', line).strip()
-                if clean and len(clean) > 3:
-                    self.module_info.title = clean
-                    break
+        Args:
+            header_text: Texte de l'en-tête
+        """
+        for line in header_text.split('\n'):
+            clean = re.sub(r'^\s*\*?\s*', '', line).strip()
+            if clean and len(clean) > 3:
+                self.module_info.title = clean
+                break
+    
+    def _extract_description_from_header(self, header_text: str) -> None:
+        """
+        Extrait la description depuis l'en-tête si pas déjà trouvée.
         
-        # Extraire la description si pas trouvée
-        if not self.module_info.description:
-            lines = header_text.split('\n')
-            desc_lines = []
-            in_desc = False
-            for line in lines:
-                clean = re.sub(r'^\s*\*?\s*', '', line).strip()
-                # Ignorer les lignes de métadonnées
-                if ':' in clean and any(k in clean.lower() for k in ['author', 'date', 'version', 'file']):
-                    in_desc = False
-                    continue
-                if clean and not clean.startswith('*'):
-                    if self.module_info.title and clean == self.module_info.title:
-                        in_desc = True
-                        continue
-                    if in_desc or not self.module_info.title:
-                        desc_lines.append(clean)
+        Args:
+            header_text: Texte de l'en-tête
+        """
+        lines = header_text.split('\n')
+        desc_lines = []
+        in_desc = False
+        
+        for line in lines:
+            clean = re.sub(r'^\s*\*?\s*', '', line).strip()
             
-            if desc_lines:
-                self.module_info.description = ' '.join(desc_lines[:3])  # Max 3 lignes
+            if ':' in clean and any(k in clean.lower() for k in ['author', 'date', 'version', 'file']):
+                in_desc = False
+                continue
+            
+            if clean and not clean.startswith('*'):
+                if self.module_info.title and clean == self.module_info.title:
+                    in_desc = True
+                    continue
+                if in_desc or not self.module_info.title:
+                    desc_lines.append(clean)
+        
+        if desc_lines:
+            self.module_info.description = ' '.join(desc_lines[:3])
     
     def _find_includes(self, source: str) -> None:
-        """Trouve les directives #include et EXEC SQL INCLUDE"""
-        # #include standard
+        """
+        Trouve les directives #include et EXEC SQL INCLUDE.
+        
+        Args:
+            source: Code source à analyser
+        """
         for match in self.INCLUDE_PATTERN.finditer(source):
             include = match.group(1)
             if include not in self.module_info.includes:
                 self.module_info.includes.append(include)
         
-        # EXEC SQL INCLUDE
         for match in self.EXEC_SQL_INCLUDE.finditer(source):
             include = match.group(1)
             if include not in self.module_info.exec_sql_includes:

@@ -26,14 +26,24 @@ from .parser import FunctionInfo, ProCParser
 
 @dataclass
 class HalsteadMetrics:
-    """Métriques Halstead pour une fonction"""
-    # Comptages de base
-    unique_operators: int = 0      # n1
-    unique_operands: int = 0       # n2
-    total_operators: int = 0       # N1
-    total_operands: int = 0        # N2
+    """
+    Métriques Halstead pour une fonction.
     
-    # Listes pour debug
+    Les métriques Halstead mesurent la complexité basée sur les opérateurs
+    et opérandes. Formule: Volume = N * log2(n) où N = N1 + N2 et n = n1 + n2.
+    
+    Attributes:
+        unique_operators: Nombre d'opérateurs distincts (n1)
+        unique_operands: Nombre d'opérandes distincts (n2)
+        total_operators: Nombre total d'opérateurs (N1)
+        total_operands: Nombre total d'opérandes (N2)
+        operators: Ensemble des opérateurs trouvés (pour debug)
+        operands: Ensemble des opérandes trouvés (pour debug)
+    """
+    unique_operators: int = 0
+    unique_operands: int = 0
+    total_operators: int = 0
+    total_operands: int = 0
     operators: Set[str] = field(default_factory=set)
     operands: Set[str] = field(default_factory=set)
     
@@ -108,9 +118,16 @@ class HalsteadMetrics:
 class HalsteadCalculator:
     """
     Calcule les métriques Halstead pour du code C/Pro*C.
+    
+    Les métriques Halstead mesurent la complexité basée sur les opérateurs
+    et opérandes. Elles permettent d'estimer le volume, la difficulté,
+    l'effort et le nombre de bugs potentiels.
+    
+    Attributes:
+        parser: Parser avec le code source analysé
+        _cache: Cache des résultats pour éviter les recalculs
     """
     
-    # Opérateurs C
     OPERATORS = {
         # Arithmétiques
         '+', '-', '*', '/', '%',
@@ -168,6 +185,12 @@ class HalsteadCalculator:
     }
     
     def __init__(self, parser: ProCParser) -> None:
+        """
+        Initialise le calculateur de métriques Halstead.
+        
+        Args:
+            parser: Parser avec le code source analysé
+        """
         self.parser = parser
         self._cache: Dict[str, HalsteadMetrics] = {}
     
@@ -186,8 +209,6 @@ class HalsteadCalculator:
         
         metrics = HalsteadMetrics()
         
-        # Si la fonction n'a pas de nœud AST (syntaxe non-standard),
-        # on retourne des métriques vides
         if function.node is None:
             self._cache[function.name] = metrics
             return metrics
@@ -213,27 +234,27 @@ class HalsteadCalculator:
         operators: Dict[str, int], 
         operands: Dict[str, int]
     ) -> None:
-        """Collecte récursivement les opérateurs et opérandes"""
+        """
+        Collecte récursivement les opérateurs et opérandes.
         
+        Args:
+            node: Nœud AST à analyser
+            operators: Dictionnaire pour compter les opérateurs
+            operands: Dictionnaire pour compter les opérandes
+        """
         node_text = self.parser.get_node_text(node)
         
-        # Vérifier si c'est un opérateur
         if node.type in self.OPERATOR_NODE_TYPES:
-            # Extraire l'opérateur spécifique
             op = self._extract_operator(node)
             if op:
                 operators[op] = operators.get(op, 0) + 1
         
-        # Mots-clés opérateurs
         if node_text in self.KEYWORD_OPERATORS:
             operators[node_text] = operators.get(node_text, 0) + 1
         
-        # Vérifier si c'est un opérande
         if node.type == 'identifier':
-            # Ignorer les noms de fonction dans les appels
             parent = node.parent
             if parent and parent.type == 'call_expression':
-                # C'est peut-être le nom de la fonction appelée
                 if node == parent.children[0]:
                     operators[node_text] = operators.get(node_text, 0) + 1
                 else:
@@ -245,21 +266,25 @@ class HalsteadCalculator:
             operands[node_text] = operands.get(node_text, 0) + 1
         
         elif node.type == 'string_literal':
-            # Normaliser les chaînes (trop de variantes sinon)
             operands['<string>'] = operands.get('<string>', 0) + 1
         
         elif node.type == 'char_literal':
             operands[node_text] = operands.get(node_text, 0) + 1
         
-        # Récursion sur les enfants
         for child in node.children:
             self._collect_metrics(child, operators, operands)
     
     def _extract_operator(self, node: Node) -> Optional[str]:
-        """Extrait l'opérateur d'un nœud d'expression"""
+        """
+        Extrait l'opérateur d'un nœud d'expression.
         
+        Args:
+            node: Nœud AST d'expression
+            
+        Returns:
+            Opérateur trouvé ou None
+        """
         if node.type == 'binary_expression':
-            # L'opérateur est généralement le 2e enfant
             for child in node.children:
                 text = self.parser.get_node_text(child)
                 if text in self.OPERATORS:

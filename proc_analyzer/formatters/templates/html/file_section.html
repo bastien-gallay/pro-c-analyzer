@@ -1,0 +1,105 @@
+<div class="file-section" data-filename="{{ file_data.filename|e }}" 
+    data-has-todos="{{ file_data.has_todos }}" 
+    data-has-cursor-issues="{{ file_data.has_cursor_issues }}" 
+    data-has-memory-issues="{{ file_data.has_memory_issues }}" 
+    data-avg-cyclomatic="{{ file_data.avg_cyclomatic }}" 
+    data-avg-cognitive="{{ file_data.avg_cognitive }}">
+    <div class="file-header">
+        <div class="file-title" title="Cliquer pour filtrer par ce fichier">📄 {{ file_data.filename|e }}</div>
+        <button class="collapsible">Afficher</button>
+    </div>
+    <div class="collapsible-content">
+        <p>
+            <strong>Lignes:</strong> {{ file_data.total_lines }} (non vides: {{ file_data.non_empty_lines }})<br>
+            <strong>Fonctions:</strong> {{ file_data.function_count }}<br>
+            <strong>Blocs SQL:</strong> {{ file_data.total_sql_blocks }}<br>
+            {% if file_data.todos_count > 0 %}
+            <strong>TODO/FIXME:</strong> {{ file_data.todos_count }} ({{ file_data.high_todos_count }} haute priorité)<br>
+            {% endif %}
+        </p>
+        
+        {% if file_data.functions %}
+        <h3>Fonctions</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Fonction</th>
+                    <th>Lignes</th>
+                    <th>Cyclo</th>
+                    <th>Cogn</th>
+                    <th>SQL</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for func in file_data.functions %}
+                <tr>
+                    <td><code>{{ func.name|e }}</code> (L{{ func.start_line }})</td>
+                    <td>{{ func.line_count }}</td>
+                    <td class="{{ func.cyclo_class }}">{{ func.cyclomatic_complexity }}</td>
+                    <td class="{{ func.cogn_class }}">{{ func.cognitive_complexity }}</td>
+                    <td>{{ func.sql_blocks_count }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+        
+        {% if file_data.todos %}
+        <h3>📝 TODO/FIXME</h3>
+        <ul class="issue-list">
+            {% for priority in ['high', 'medium', 'low'] %}
+                {% set priority_todos = file_data.todos_by_priority[priority] %}
+                {% if priority_todos %}
+                    {% for todo in priority_todos %}
+                    <li class="issue-item">
+                        <span class="badge badge-{{ priority }}">{{ priority|upper }}</span>
+                        <strong>{{ todo.tag }}</strong> <span class="issue-location">L{{ todo.line_number }}</span><br>
+                        {{ todo.message|e }}
+                    </li>
+                    {% endfor %}
+                {% endif %}
+            {% endfor %}
+        </ul>
+        {% endif %}
+        
+        {% if file_data.cursor_issues %}
+        <h3>🔄 Problèmes de curseurs SQL</h3>
+        <ul class="issue-list">
+            {% for issue in file_data.cursor_issues[:20] %}
+            <li class="issue-item {{ issue.severity }}">
+                <strong>{{ issue.severity|upper }}</strong> <span class="issue-location">L{{ issue.line_number }}</span><br>
+                Curseur: <code>{{ issue.cursor_name|e }}</code> - {{ issue.message|e }}
+            </li>
+            {% endfor %}
+            {% if file_data.cursor_issues|length > 20 %}
+            <li><em>... et {{ file_data.cursor_issues|length - 20 }} autres problèmes</em></li>
+            {% endif %}
+        </ul>
+        {% endif %}
+        
+        {% if file_data.memory_issues %}
+        <h3>🧠 Problèmes de gestion mémoire</h3>
+        {% for severity in ['critical', 'error', 'warning'] %}
+            {% set severity_issues = file_data.memory_issues_by_severity[severity] %}
+            {% if severity_issues %}
+            <h4><span class="badge badge-{{ severity }}">{{ severity|upper }}</span> ({{ severity_issues|length }})</h4>
+            <ul class="issue-list">
+                {% for issue in severity_issues[:15] %}
+                <li class="issue-item {{ severity }}">
+                    <span class="issue-location">L{{ issue.line_number }}</span><br>
+                    {{ issue.message|e }}
+                    {% if issue.recommendation %}
+                    <br><em>→ {{ issue.recommendation|e }}</em>
+                    {% endif %}
+                </li>
+                {% endfor %}
+                {% if severity_issues|length > 15 %}
+                <li><em>... et {{ severity_issues|length - 15 }} autres</em></li>
+                {% endif %}
+            </ul>
+            {% endif %}
+        {% endfor %}
+        {% endif %}
+    </div>
+</div>
+

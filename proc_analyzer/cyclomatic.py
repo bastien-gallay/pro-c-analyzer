@@ -18,24 +18,34 @@ class CyclomaticCalculator:
     Calcule la complexité cyclomatique selon McCabe.
     
     La complexité cyclomatique mesure le nombre de chemins linéairement
-    indépendants à travers le code source.
+    indépendants à travers le code source. Formule: M = E - N + 2P où
+    E = nombre d'arêtes, N = nombre de nœuds, P = composants connexes.
+    En pratique, on compte: 1 + nombre de points de décision.
+    
+    Attributes:
+        parser: Parser avec le code source analysé
+        _cache: Cache des résultats pour éviter les recalculs
     """
     
-    # Nœuds qui créent un branchement (+1 chacun)
     BRANCHING_NODES = {
-        'if_statement',           # if
-        'while_statement',        # while
-        'for_statement',          # for
-        'do_statement',           # do...while
-        'case_statement',         # case dans switch
-        'conditional_expression', # opérateur ternaire ?:
-        'catch_clause',           # catch (si supporté)
+        'if_statement',
+        'while_statement',
+        'for_statement',
+        'do_statement',
+        'case_statement',
+        'conditional_expression',
+        'catch_clause',
     }
     
-    # Opérateurs logiques qui créent des branches supplémentaires
     LOGICAL_OPERATORS = {'&&', '||'}
     
     def __init__(self, parser: ProCParser) -> None:
+        """
+        Initialise le calculateur de complexité cyclomatique.
+        
+        Args:
+            parser: Parser avec le code source analysé
+        """
         self.parser = parser
         self._cache: Dict[str, int] = {}
     
@@ -52,20 +62,16 @@ class CyclomaticCalculator:
         if function.name in self._cache:
             return self._cache[function.name]
         
-        complexity = 1  # Base: un chemin minimum
+        complexity = 1
         
-        # Si la fonction n'a pas de nœud AST (syntaxe non-standard), 
-        # on retourne la complexité de base
         if function.node is None:
             self._cache[function.name] = complexity
             return complexity
         
-        # Compter les nœuds de branchement
         for node in self.parser.walk(function.node):
             if node.type in self.BRANCHING_NODES:
                 complexity += 1
             
-            # Compter les opérateurs logiques && et ||
             if node.type == 'binary_expression':
                 operator = self._get_operator(node)
                 if operator in self.LOGICAL_OPERATORS:
@@ -75,11 +81,18 @@ class CyclomaticCalculator:
         return complexity
     
     def _get_operator(self, binary_expr: Node) -> str:
-        """Extrait l'opérateur d'une expression binaire"""
+        """
+        Extrait l'opérateur d'une expression binaire.
+        
+        Args:
+            binary_expr: Nœud AST de type 'binary_expression'
+            
+        Returns:
+            Opérateur trouvé ('&&', '||') ou chaîne vide
+        """
         for child in binary_expr.children:
             if child.type in ('&&', '||', 'and', 'or'):
                 return self.parser.get_node_text(child)
-            # tree-sitter peut aussi utiliser des nœuds nommés
             if child.is_named and child.type == 'binary_expression':
                 continue
             text = self.parser.get_node_text(child)
@@ -118,7 +131,6 @@ class CyclomaticCalculator:
             'logical_or_count': 0,
         }
         
-        # Si la fonction n'a pas de nœud AST, retourner les détails vides
         if function.node is None:
             details['total'] = self.calculate(function)
             return details

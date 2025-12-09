@@ -2,3 +2,4 @@ tree-sitter>=0.21.0
 tree-sitter-c>=0.21.0
 rich>=13.0.0
 click>=8.0.0
+jinja2>=3.0.0

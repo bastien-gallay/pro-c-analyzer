@@ -5,7 +5,7 @@ Neutralise les blocs EXEC SQL pour permettre le parsing C standard
 
 import re
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Any
 
 
 @dataclass
@@ -21,31 +21,30 @@ class ExecSqlBlock:
 class ProCPreprocessor:
     """
     Préprocesseur pour code Pro*C.
+    
     Remplace les blocs EXEC SQL par des appels de fonction factices
     pour permettre le parsing par un parser C standard.
+    
+    Attributes:
+        sql_blocks: Liste des blocs SQL trouvés
+        _line_offsets: Offsets des lignes pour conversion position -> ligne
     """
     
-    # Pattern pour détecter les blocs EXEC SQL
-    # Gère les blocs multi-lignes et les différentes variantes
     EXEC_SQL_PATTERN = re.compile(
         r'EXEC\s+SQL\s+(.*?)\s*;',
         re.IGNORECASE | re.DOTALL
     )
     
-    # Pattern pour EXEC ORACLE
     EXEC_ORACLE_PATTERN = re.compile(
         r'EXEC\s+ORACLE\s+(.*?)\s*;',
         re.IGNORECASE | re.DOTALL
     )
     
-    # Pattern pour les déclarations de variables hôtes
-    # EXEC SQL BEGIN DECLARE SECTION / END DECLARE SECTION
     DECLARE_SECTION_PATTERN = re.compile(
         r'EXEC\s+SQL\s+BEGIN\s+DECLARE\s+SECTION\s*;(.*?)EXEC\s+SQL\s+END\s+DECLARE\s+SECTION\s*;',
         re.IGNORECASE | re.DOTALL
     )
     
-    # Types SQL reconnus pour classification
     SQL_TYPES = {
         'SELECT': re.compile(r'^\s*SELECT\b', re.IGNORECASE),
         'INSERT': re.compile(r'^\s*INSERT\b', re.IGNORECASE),
@@ -67,25 +66,47 @@ class ProCPreprocessor:
     }
     
     def __init__(self) -> None:
+        """Initialise le préprocesseur."""
         self.sql_blocks: List[ExecSqlBlock] = []
         self._line_offsets: List[int] = []
     
     def _compute_line_offsets(self, source: str) -> None:
-        """Calcule les offsets de chaque ligne pour conversion position -> ligne"""
+        """
+        Calcule les offsets de chaque ligne pour conversion position -> ligne.
+        
+        Args:
+            source: Code source complet
+        """
         self._line_offsets = [0]
         for i, char in enumerate(source):
             if char == '\n':
                 self._line_offsets.append(i + 1)
     
     def _position_to_line(self, position: int) -> int:
-        """Convertit une position dans le source en numéro de ligne (1-indexed)"""
+        """
+        Convertit une position dans le source en numéro de ligne (1-indexed).
+        
+        Args:
+            position: Position dans le source
+            
+        Returns:
+            Numéro de ligne (1-indexed)
+        """
         for i, offset in enumerate(self._line_offsets):
             if offset > position:
                 return i
         return len(self._line_offsets)
     
     def _classify_sql(self, content: str) -> str:
-        """Identifie le type d'instruction SQL"""
+        """
+        Identifie le type d'instruction SQL.
+        
+        Args:
+            content: Contenu de l'instruction SQL
+            
+        Returns:
+            Type SQL identifié ou 'OTHER'
+        """
         for sql_type, pattern in self.SQL_TYPES.items():
             if pattern.match(content):
                 return sql_type
@@ -104,10 +125,22 @@ class ProCPreprocessor:
         self.sql_blocks = []
         self._compute_line_offsets(source)
         
-        result = source
-        offset_adjustment = 0
+        result = self._process_declare_sections(source)
+        result = self._process_exec_sql_blocks(result)
+        result = self.EXEC_ORACLE_PATTERN.sub('__exec_oracle__()', result)
         
-        # D'abord, traiter les sections DECLARE (les garder comme commentaires)
+        return result, self.sql_blocks
+    
+    def _process_declare_sections(self, source: str) -> str:
+        """
+        Traite les sections DECLARE et les remplace par des commentaires.
+        
+        Args:
+            source: Code source Pro*C
+            
+        Returns:
+            Code source avec sections DECLARE remplacées
+        """
         for match in self.DECLARE_SECTION_PATTERN.finditer(source):
             block = ExecSqlBlock(
                 start=match.start(),
@@ -118,21 +151,28 @@ class ProCPreprocessor:
             )
             self.sql_blocks.append(block)
         
-        # Remplacer les DECLARE SECTIONS par des commentaires
         result = self.DECLARE_SECTION_PATTERN.sub(
             lambda m: f'/* EXEC SQL DECLARE SECTION */\n{m.group(1)}\n/* END DECLARE SECTION */',
-            result
+            source
         )
         
-        # Recalculer les offsets après modification
         self._compute_line_offsets(result)
+        return result
+    
+    def _process_exec_sql_blocks(self, source: str) -> str:
+        """
+        Traite les blocs EXEC SQL et les remplace par des appels de fonction.
         
-        # Traiter les blocs EXEC SQL restants
+        Args:
+            source: Code source Pro*C
+            
+        Returns:
+            Code source avec blocs EXEC SQL remplacés
+        """
         processed = []
         last_end = 0
         
-        for match in self.EXEC_SQL_PATTERN.finditer(result):
-            # Vérifier qu'on n'est pas dans une section déjà traitée
+        for match in self.EXEC_SQL_PATTERN.finditer(source):
             sql_content = match.group(1).strip()
             if sql_content.upper().startswith('BEGIN DECLARE') or sql_content.upper().startswith('END DECLARE'):
                 continue
@@ -146,25 +186,23 @@ class ProCPreprocessor:
             )
             self.sql_blocks.append(block)
             
-            # Construire le remplacement
-            # On utilise un appel de fonction factice pour préserver la structure
             replacement = f'__exec_sql_{block.sql_type.lower()}__()'
             
-            processed.append(result[last_end:match.start()])
+            processed.append(source[last_end:match.start()])
             processed.append(replacement)
             last_end = match.end()
         
-        processed.append(result[last_end:])
-        result = ''.join(processed)
-        
-        # Traiter aussi EXEC ORACLE
-        result = self.EXEC_ORACLE_PATTERN.sub('__exec_oracle__()', result)
-        
-        return result, self.sql_blocks
+        processed.append(source[last_end:])
+        return ''.join(processed)
     
-    def get_sql_statistics(self) -> dict:
-        """Retourne des statistiques sur les blocs SQL trouvés"""
-        stats = {
+    def get_sql_statistics(self) -> Dict[str, Any]:
+        """
+        Retourne des statistiques sur les blocs SQL trouvés.
+        
+        Returns:
+            Dictionnaire avec total_blocks et by_type
+        """
+        stats: Dict[str, Any] = {
             'total_blocks': len(self.sql_blocks),
             'by_type': {},
         }

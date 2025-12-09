@@ -1,0 +1,18 @@
+{% if todos_data.todos %}
+<h2>TODO/FIXME</h2>
+{% for priority in ['high', 'medium', 'low'] %}
+    {% set priority_todos = todos_data.todos_by_priority[priority] %}
+    {% if priority_todos %}
+    <h3><span class="badge badge-{{ priority }}">{{ priority|upper }}</span> ({{ priority_todos|length }})</h3>
+    <ul class="issue-list">
+        {% for todo_item in priority_todos %}
+        <li class="issue-item">
+            <strong>{{ todo_item.tag }}</strong> <span class="issue-location">{{ todo_item.filename }}:{{ todo_item.line_number }}</span><br>
+            {{ todo_item.message|e }}
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+{% endfor %}
+{% endif %}
+

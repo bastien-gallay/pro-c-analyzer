@@ -1,0 +1,15 @@
+{% if cursor_issues %}
+<h2>Problèmes de curseurs SQL</h2>
+<ul class="issue-list">
+    {% for issue in cursor_issues[:50] %}
+    <li class="issue-item {{ issue.severity }}">
+        <strong>{{ issue.severity|upper }}</strong> <span class="issue-location">{{ issue.filename }}:{{ issue.line_number }}</span><br>
+        Curseur: <code>{{ issue.cursor_name|e }}</code> - {{ issue.message|e }}
+    </li>
+    {% endfor %}
+    {% if cursor_issues|length > 50 %}
+    <li><em>... et {{ cursor_issues|length - 50 }} autres problèmes</em></li>
+    {% endif %}
+</ul>
+{% endif %}
+

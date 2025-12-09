@@ -39,7 +39,6 @@ class JSONFormatter:
         Returns:
             Chaîne JSON formatée
         """
-        # Construire le dictionnaire avec métadonnées
         data = {
             'metadata': {
                 'version': '0.2.0',

@@ -13,7 +13,7 @@ Règles principales:
 """
 
 from tree_sitter import Node
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple, Any, Optional
 from .parser import FunctionInfo, ProCParser
 
 
@@ -22,35 +22,39 @@ class CognitiveCalculator:
     Calcule la complexité cognitive selon les principes SonarSource.
     
     Cette métrique évalue l'effort mental nécessaire pour comprendre le code,
-    en pénalisant particulièrement les structures imbriquées.
+    en pénalisant particulièrement les structures imbriquées. Contrairement
+    à la complexité cyclomatique, elle pénalise l'imbrication et les séquences
+    d'opérateurs logiques mixtes.
+    
+    Attributes:
+        parser: Parser avec le code source analysé
+        _cache: Cache des résultats pour éviter les recalculs
     """
     
-    # Structures qui incrémentent la complexité ET augmentent l'imbrication
-    # Ces structures créent un nouveau niveau d'imbrication qui pénalise
-    # la lisibilité selon les principes SonarSource (complexité cognitive)
     NESTING_STRUCTURES = {
         'if_statement',
         'while_statement', 
         'for_statement',
         'do_statement',
         'switch_statement',
-        'conditional_expression',  # ternaire
+        'conditional_expression',
     }
     
-    # Structures qui incrémentent la complexité SANS augmenter l'imbrication
-    # Contrairement aux structures ci-dessus, celles-ci ajoutent de la complexité
-    # mais ne créent pas un nouveau niveau d'imbrication (donc pas de pénalité supplémentaire)
     NON_NESTING_INCREMENTS = {
-        'else_clause',      # else ajoute 1 mais garde le même niveau d'imbrication
-        'case_statement',   # case dans switch - même niveau que le switch
-        'goto_statement',   # goto - saut mais pas d'imbrication
+        'else_clause',
+        'case_statement',
+        'goto_statement',
     }
     
-    # Les breaks/continues vers des labels ajoutent +1 car ils créent
-    # un flux de contrôle non linéaire difficile à suivre mentalement
     JUMP_STATEMENTS = {'break_statement', 'continue_statement'}
     
     def __init__(self, parser: ProCParser) -> None:
+        """
+        Initialise le calculateur de complexité cognitive.
+        
+        Args:
+            parser: Parser avec le code source analysé
+        """
         self.parser = parser
         self._cache: Dict[str, int] = {}
     
@@ -69,13 +73,10 @@ class CognitiveCalculator:
         
         complexity = 0
         
-        # Si la fonction n'a pas de nœud AST (syntaxe non-standard),
-        # on retourne 0 (pas de complexité calculable sans AST)
         if function.node is None:
             self._cache[function.name] = complexity
             return complexity
         
-        # Trouver le corps de la fonction (compound_statement)
         body = self._find_function_body(function.node)
         if body:
             complexity = self._calculate_recursive(body, nesting_level=0)
@@ -83,8 +84,16 @@ class CognitiveCalculator:
         self._cache[function.name] = complexity
         return complexity
     
-    def _find_function_body(self, func_node: Node) -> Node:
-        """Trouve le compound_statement (corps) de la fonction"""
+    def _find_function_body(self, func_node: Node) -> Optional[Node]:
+        """
+        Trouve le compound_statement (corps) de la fonction.
+        
+        Args:
+            func_node: Nœud AST de type 'function_definition'
+            
+        Returns:
+            Nœud compound_statement si trouvé, None sinon
+        """
         for child in func_node.children:
             if child.type == 'compound_statement':
                 return child
@@ -125,7 +134,6 @@ class CognitiveCalculator:
         Returns:
             Complexité pour cette structure et ses enfants
         """
-        # +1 pour la structure + niveau d'imbrication actuel
         complexity = 1 + nesting_level
         
         for child in node.children:
@@ -134,7 +142,6 @@ class CognitiveCalculator:
             elif child.type == 'else_clause':
                 complexity += self._calculate_else_clause(child, nesting_level)
             elif child.type == 'if_statement':
-                # else if chaîné - ne pas augmenter l'imbrication
                 complexity += self._calculate_recursive(child, nesting_level)
             else:
                 complexity += self._calculate_recursive(child, nesting_level)
@@ -144,8 +151,6 @@ class CognitiveCalculator:
     def _calculate_else_clause(self, else_node: Node, nesting_level: int) -> int:
         """
         Calcule la complexité pour une clause else.
-        
-        else: +1 mais garde le même niveau pour son contenu (sauf else if).
         
         Args:
             else_node: Nœud else_clause
@@ -160,7 +165,6 @@ class CognitiveCalculator:
             if subchild.type == 'compound_statement':
                 complexity += self._calculate_recursive(subchild, nesting_level + 1)
             elif subchild.type == 'if_statement':
-                # else if: le if sera compté normalement sans augmenter l'imbrication
                 complexity += self._calculate_recursive(subchild, nesting_level)
             else:
                 complexity += self._calculate_recursive(subchild, nesting_level + 1)
@@ -170,8 +174,6 @@ class CognitiveCalculator:
     def _calculate_case_statement(self, node: Node, nesting_level: int) -> int:
         """
         Calcule la complexité pour un case statement.
-        
-        case incrémente +1 mais n'augmente pas l'imbrication.
         
         Args:
             node: Nœud case_statement
@@ -202,7 +204,15 @@ class CognitiveCalculator:
         return complexity
     
     def _has_label(self, jump_node: Node) -> bool:
-        """Vérifie si un break/continue a un label"""
+        """
+        Vérifie si un break/continue a un label.
+        
+        Args:
+            jump_node: Nœud break_statement ou continue_statement
+            
+        Returns:
+            True si le jump a un label, False sinon
+        """
         for child in jump_node.children:
             if child.type == 'statement_identifier' or child.type == 'identifier':
                 return True
@@ -231,7 +241,6 @@ class CognitiveCalculator:
         if not operators:
             return 0
         
-        # Compter les séquences (changements d'opérateur + 1)
         sequences = 1
         for i in range(1, len(operators)):
             if operators[i] != operators[i-1]:
@@ -258,7 +267,6 @@ class CognitiveCalculator:
         if node.type != 'binary_expression':
             return operators
         
-        # Trouver l'opérateur
         op = None
         left = None
         right = None
@@ -272,15 +280,12 @@ class CognitiveCalculator:
             elif child.type == 'binary_expression':
                 right = child
         
-        # Récursion à gauche
         if left:
             operators.extend(self._collect_logical_operators(left))
         
-        # Ajouter l'opérateur courant
         if op:
             operators.append(op)
         
-        # Récursion à droite
         if right:
             operators.extend(self._collect_logical_operators(right))
         
@@ -330,7 +335,14 @@ class CognitiveCalculator:
         return details
     
     def _collect_details(self, node: Node, nesting: int, details: Dict[str, Any]) -> None:
-        """Collecte les détails récursivement"""
+        """
+        Collecte les détails récursivement pour le rapport détaillé.
+        
+        Args:
+            node: Nœud AST à analyser
+            nesting: Niveau d'imbrication actuel
+            details: Dictionnaire à remplir avec les détails
+        """
         details['max_nesting'] = max(details['max_nesting'], nesting)
         
         if node.type == 'if_statement':

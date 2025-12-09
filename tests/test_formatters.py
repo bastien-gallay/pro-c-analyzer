@@ -224,6 +224,119 @@ class TestHTMLFormatter:
         
         # Doit contenir les sections principales
         assert "Résumé" in output or "summary" in output.lower()
+    
+    def test_prepare_summary_data(self, minimal_report):
+        """Test de préparation des données du résumé."""
+        formatter = HTMLFormatter()
+        summary_data = formatter._prepare_summary_data(minimal_report)
+        
+        assert 'total_files' in summary_data
+        assert 'total_functions' in summary_data
+        assert 'total_lines' in summary_data
+        assert 'total_lines_formatted' in summary_data
+        assert 'avg_cyclomatic' in summary_data
+        assert 'avg_cognitive' in summary_data
+        assert 'total_todos' in summary_data
+        assert 'total_cursor_issues' in summary_data
+        assert 'total_memory_issues' in summary_data
+        
+        assert summary_data['total_files'] == minimal_report.total_files
+        assert summary_data['total_functions'] == minimal_report.total_functions
+        assert isinstance(summary_data['total_lines_formatted'], str)
+        assert ',' in summary_data['total_lines_formatted'] or summary_data['total_lines'] < 1000
+    
+    def test_prepare_file_data(self, minimal_report):
+        """Test de préparation des données d'un fichier."""
+        formatter = HTMLFormatter()
+        file_metrics = minimal_report.files[0]
+        file_data = formatter._prepare_file_data(file_metrics)
+        
+        assert 'filename' in file_data
+        assert 'has_todos' in file_data
+        assert 'has_cursor_issues' in file_data
+        assert 'has_memory_issues' in file_data
+        assert 'avg_cyclomatic' in file_data
+        assert 'avg_cognitive' in file_data
+        assert 'total_lines' in file_data
+        assert 'functions' in file_data
+        assert 'todos_by_priority' in file_data
+        assert 'cursor_issues' in file_data
+        assert 'memory_issues_by_severity' in file_data
+        
+        assert file_data['filename'] == 'test.pc'
+        assert file_data['has_todos'] == 'true'
+        assert len(file_data['functions']) == 1
+        assert file_data['functions'][0]['name'] == 'test_func'
+        assert 'cyclo_class' in file_data['functions'][0]
+        assert 'cogn_class' in file_data['functions'][0]
+    
+    def test_prepare_todos_data(self, minimal_report):
+        """Test de préparation des données TODOs."""
+        formatter = HTMLFormatter()
+        todos_data = formatter._prepare_todos_data(minimal_report)
+        
+        assert 'todos' in todos_data
+        assert 'todos_by_priority' in todos_data
+        assert 'high' in todos_data['todos_by_priority']
+        assert 'medium' in todos_data['todos_by_priority']
+        assert 'low' in todos_data['todos_by_priority']
+        
+        if minimal_report.total_todos > 0:
+            assert todos_data['todos'] is not None
+            assert len(todos_data['todos_by_priority']['high']) > 0 or \
+                   len(todos_data['todos_by_priority']['medium']) > 0 or \
+                   len(todos_data['todos_by_priority']['low']) > 0
+    
+    def test_prepare_cursor_issues_data(self, minimal_report):
+        """Test de préparation des données des problèmes de curseurs."""
+        formatter = HTMLFormatter()
+        cursor_data = formatter._prepare_cursor_issues_data(minimal_report)
+        
+        assert isinstance(cursor_data, list)
+        for issue in cursor_data:
+            assert 'filepath' in issue
+            assert 'filename' in issue
+            assert 'severity' in issue
+            assert 'cursor_name' in issue
+            assert 'message' in issue
+            assert 'line_number' in issue
+    
+    def test_prepare_memory_issues_data(self, minimal_report):
+        """Test de préparation des données des problèmes mémoire."""
+        formatter = HTMLFormatter()
+        memory_data = formatter._prepare_memory_issues_data(minimal_report)
+        
+        assert 'memory_issues' in memory_data
+        assert 'memory_issues_by_severity' in memory_data
+        assert 'critical' in memory_data['memory_issues_by_severity']
+        assert 'error' in memory_data['memory_issues_by_severity']
+        assert 'warning' in memory_data['memory_issues_by_severity']
+        assert 'info' in memory_data['memory_issues_by_severity']
+    
+    def test_complexity_class(self):
+        """Test de la méthode _complexity_class."""
+        formatter = HTMLFormatter()
+        
+        # Test low
+        assert formatter._complexity_class(3, 5, 10) == 'complexity-low'
+        assert formatter._complexity_class(5, 5, 10) == 'complexity-low'
+        
+        # Test medium
+        assert formatter._complexity_class(6, 5, 10) == 'complexity-medium'
+        assert formatter._complexity_class(10, 5, 10) == 'complexity-medium'
+        
+        # Test high
+        assert formatter._complexity_class(11, 5, 10) == 'complexity-high'
+        assert formatter._complexity_class(20, 5, 10) == 'complexity-high'
+    
+    def test_prepare_files_data(self, minimal_report):
+        """Test de préparation des données de tous les fichiers."""
+        formatter = HTMLFormatter()
+        files_data = formatter._prepare_files_data(minimal_report)
+        
+        assert isinstance(files_data, list)
+        assert len(files_data) == len(minimal_report.files)
+        assert all('filename' in f for f in files_data)
 
 
 class TestMarkdownFormatter:

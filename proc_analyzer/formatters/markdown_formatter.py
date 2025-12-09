@@ -86,7 +86,6 @@ class MarkdownFormatter:
         file_name = Path(metrics.filepath).name
         parts = [f'### {file_name}']
         
-        # Stats générales
         parts.append(f"**Lignes:** {metrics.total_lines} (non vides: {metrics.non_empty_lines})  ")
         parts.append(f"**Fonctions:** {metrics.function_count}  ")
         parts.append(f"**Blocs SQL:** {metrics.total_sql_blocks}")
@@ -110,7 +109,6 @@ class MarkdownFormatter:
                 parts.append(f"  ")
                 parts.append(f"**Mémoire:** {mem_issues} problèmes ({critical} critiques)")
         
-        # Tableau des fonctions
         if metrics.functions:
             parts.append('\n#### Fonctions\n')
             parts.append('| Fonction | Lignes | Cyclo | Cogn | SQL |')
@@ -127,11 +125,9 @@ class MarkdownFormatter:
                     f"{cogn_badge} {func.cognitive_complexity} | {func.sql_blocks_count} |"
                 )
         
-        # TODOs pour ce fichier
         if metrics.todos:
             parts.append('\n#### 📝 TODO/FIXME\n')
             
-            # Grouper par priorité
             by_priority = {'high': [], 'medium': [], 'low': []}
             for todo in metrics.todos:
                 priority = todo.get('priority', 'low')
@@ -155,7 +151,6 @@ class MarkdownFormatter:
                 if len(items) > 10:
                     parts.append(f"*... et {len(items) - 10} autres*")
         
-        # Problèmes de curseurs pour ce fichier
         if metrics.cursor_analysis and metrics.cursor_analysis.get('issues'):
             issues = metrics.cursor_analysis['issues']
             if issues:
@@ -174,13 +169,11 @@ class MarkdownFormatter:
                 if len(issues) > 15:
                     parts.append(f"*... et {len(issues) - 15} autres problèmes*")
         
-        # Problèmes mémoire pour ce fichier
         if metrics.memory_analysis and metrics.memory_analysis.get('issues'):
             issues = metrics.memory_analysis['issues']
             if issues:
                 parts.append('\n#### 🧠 Problèmes de gestion mémoire\n')
                 
-                # Grouper par sévérité
                 by_severity = {'critical': [], 'error': [], 'warning': [], 'info': []}
                 for issue in issues:
                     severity = issue.get('severity', 'info')
@@ -216,7 +209,6 @@ class MarkdownFormatter:
         
         parts = ['## 📝 TODO/FIXME']
         
-        # Grouper par priorité
         by_priority = {'high': [], 'medium': [], 'low': []}
         for filepath, todo in todos:
             priority = todo.get('priority', 'low')
@@ -275,7 +267,6 @@ class MarkdownFormatter:
         
         parts = ['## 🧠 Problèmes de gestion mémoire']
         
-        # Grouper par sévérité
         by_severity = {'critical': [], 'error': [], 'warning': [], 'info': []}
         for filepath, issue in issues:
             severity = issue.get('severity', 'info')

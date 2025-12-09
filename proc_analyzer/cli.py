@@ -508,14 +508,12 @@ def analyze(
         border_style="blue"
     ))
     
-    # Utiliser la fonction avec progression
     report = analyze_with_progress(analyzer, path, pattern, recursive)
     
     if not report.files:
         console.print("[yellow]Aucun fichier trouvé.[/yellow]")
         return
     
-    # Sortie selon le format demandé
     if output_format in ('json', 'json-pretty'):
         json_formatter = JSONFormatter(pretty=(output_format == 'json-pretty'))
         if output:
@@ -547,11 +545,10 @@ def analyze(
             for row in report.to_csv_rows():
                 console.print(','.join(row))
     
-    else:  # text
+    else:
         for file_metrics in report.files:
             print_file_report(file_metrics, verbose)
         
-        # Sections supplémentaires en mode verbeux
         if verbose:
             print_todos(report)
             print_cursor_issues(report)
@@ -561,7 +558,6 @@ def analyze(
         if len(report.files) > 1 or report.total_functions > 0:
             print_summary(report, threshold_cyclo, threshold_cognitive)
         
-        # Si output est spécifié pour le format text, sauvegarder aussi en JSON
         if output:
             json_formatter = JSONFormatter(pretty=True)
             json_formatter.save(report, output)

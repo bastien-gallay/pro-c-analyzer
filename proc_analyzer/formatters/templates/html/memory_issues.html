@@ -1,0 +1,24 @@
+{% if memory_issues %}
+<h2>Problèmes de gestion mémoire</h2>
+{% for severity in ['critical', 'error', 'warning'] %}
+    {% set severity_issues = memory_issues_by_severity[severity] %}
+    {% if severity_issues %}
+    <h3><span class="badge badge-{{ severity }}">{{ severity|upper }}</span> ({{ severity_issues|length }})</h3>
+    <ul class="issue-list">
+        {% for issue in severity_issues[:30] %}
+        <li class="issue-item {{ severity }}">
+            <span class="issue-location">{{ issue.filename }}:{{ issue.line_number }}</span><br>
+            {{ issue.message|e }}
+            {% if issue.recommendation %}
+            <br><em>→ {{ issue.recommendation|e }}</em>
+            {% endif %}
+        </li>
+        {% endfor %}
+        {% if severity_issues|length > 30 %}
+        <li><em>... et {{ severity_issues|length - 30 }} autres</em></li>
+        {% endif %}
+    </ul>
+    {% endif %}
+{% endfor %}
+{% endif %}
+

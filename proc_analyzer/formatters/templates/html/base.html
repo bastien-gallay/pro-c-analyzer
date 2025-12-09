@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pro*C Static Analyzer - Rapport d'analyse</title>
+    <style>
+{{ css_content }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Pro*C Static Analyzer - Rapport d'analyse</h1>
+        <p style="color: #6b7280; margin-bottom: 30px;">Généré le {{ generated_at }}</p>
+        
+        {% include 'summary.html' %}
+        {% include 'files.html' %}
+        {% include 'todos.html' %}
+        {% include 'cursor_issues.html' %}
+        {% include 'memory_issues.html' %}
+    </div>
+    <script>
+{{ js_content }}
+    </script>
+</body>
+</html>
+

@@ -4,7 +4,7 @@ Interface ligne de commande pour l'analyseur Pro*C
 
 import csv
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Set
 
 import click
 from rich.console import Console
@@ -20,6 +20,26 @@ from .formatters import JSONFormatter, HTMLFormatter, MarkdownFormatter
 console = Console()
 
 
+def parse_patterns(pattern_str: str) -> List[str]:
+    """
+    Parse un pattern qui peut contenir plusieurs patterns séparés par des points-virgules.
+    
+    Args:
+        pattern_str: Pattern(s) glob, séparés par des points-virgules (ex: "*.pc;*.sc;*.inc")
+        
+    Returns:
+        Liste des patterns individuels
+    """
+    if not pattern_str:
+        return ["*.pc"]
+    
+    # Séparer par point-virgule et nettoyer les espaces
+    patterns = [p.strip() for p in pattern_str.split(';') if p.strip()]
+    
+    # Si aucun pattern valide, retourner le défaut
+    return patterns if patterns else ["*.pc"]
+
+
 def analyze_with_progress(analyzer: ProCAnalyzer, path: str, pattern: str = "*.pc", recursive: bool = True) -> AnalysisReport:
     """
     Analyse un fichier ou répertoire avec affichage de la progression.
@@ -27,7 +47,8 @@ def analyze_with_progress(analyzer: ProCAnalyzer, path: str, pattern: str = "*.p
     Args:
         analyzer: Instance de ProCAnalyzer
         path: Chemin du fichier ou répertoire à analyser
-        pattern: Pattern glob pour les fichiers (ignoré si path est un fichier)
+        pattern: Pattern(s) glob pour les fichiers, séparés par des points-virgules
+                 (ex: "*.pc;*.sc;*.inc") (ignoré si path est un fichier)
         recursive: Recherche récursive (ignoré si path est un fichier)
         
     Returns:
@@ -43,13 +64,23 @@ def analyze_with_progress(analyzer: ProCAnalyzer, path: str, pattern: str = "*.p
         console.print("[green]✓ Analyse terminée[/green]")
         return report
     
+    # Parser les patterns multiples
+    patterns = parse_patterns(pattern)
+    
     # Analyse d'un répertoire avec barre de progression
     # D'abord, compter les fichiers pour initialiser la barre
-    if recursive:
-        files_list = list(path_obj.rglob(pattern))
-    else:
-        files_list = list(path_obj.glob(pattern))
-    total_files = len([f for f in files_list if f.is_file()])
+    # Collecter tous les fichiers correspondant aux différents patterns
+    files_set: Set[Path] = set()
+    for pat in patterns:
+        if recursive:
+            files_list = list(path_obj.rglob(pat))
+        else:
+            files_list = list(path_obj.glob(pat))
+        files_set.update(f for f in files_list if f.is_file())
+    
+    # Trier pour avoir un ordre déterministe
+    files_list = sorted(files_set)
+    total_files = len(files_list)
     
     if total_files == 0:
         console.print("[yellow]Aucun fichier trouvé.[/yellow]")
@@ -81,7 +112,7 @@ def analyze_with_progress(analyzer: ProCAnalyzer, path: str, pattern: str = "*.p
         
         report = analyzer.analyze_directory(
             path, 
-            pattern=pattern, 
+            patterns=patterns, 
             recursive=recursive,
             progress_callback=update_progress
         )
@@ -423,7 +454,7 @@ def cli():
 
 @cli.command()
 @click.argument('path', type=click.Path(exists=True))
-@click.option('--pattern', '-p', default='*.pc', help='Pattern glob pour les fichiers (défaut: *.pc)')
+@click.option('--pattern', '-p', default='*.pc', help='Pattern(s) glob pour les fichiers, séparés par des points-virgules (ex: "*.pc;*.sc;*.inc") (défaut: *.pc)')
 @click.option('--format', '-f', 'output_format', type=click.Choice(['text', 'json', 'json-pretty', 'html', 'markdown', 'csv']), default='text', help='Format de sortie')
 @click.option('--output', '-o', type=click.Path(), help='Fichier de sortie (requis pour html/markdown, optionnel pour json/csv)')
 @click.option('--threshold-cyclo', '-tc', default=10, help='Seuil complexité cyclomatique (défaut: 10)')
@@ -458,6 +489,8 @@ def analyze(
         proc-analyzer analyze program.pc
         
         proc-analyzer analyze ./src --pattern "*.pc"
+        
+        proc-analyzer analyze ./src --pattern "*.pc;*.sc;*.inc"
         
         proc-analyzer analyze ./src -f json -o report.json
         

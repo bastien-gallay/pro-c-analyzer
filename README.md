@@ -33,6 +33,9 @@ proc-analyzer analyze fichier.pc
 # Répertoire (récursif)
 proc-analyzer analyze ./src --pattern "*.pc"
 
+# Plusieurs patterns séparés par des points-virgules
+proc-analyzer analyze ./src --pattern "*.pc;*.sc;*.inc"
+
 # Mode verbeux (Halstead, détails)
 proc-analyzer analyze ./src -v
 ```
@@ -72,7 +75,7 @@ proc-analyzer analyze ./src -f csv -o rapport.csv
 ### Options
 
 ```
---pattern, -p      Pattern glob (défaut: *.pc)
+--pattern, -p      Pattern(s) glob, séparés par des points-virgules (ex: "*.pc;*.sc;*.inc") (défaut: *.pc)
 --format, -f       Format: text, json, json-pretty, html, markdown, csv
                    (défaut: text)
 --output, -o       Fichier de sortie (requis pour html/markdown)

@@ -115,6 +115,22 @@ class HTMLFormatter:
             padding: 20px;
             border-radius: 6px;
             border-left: 4px solid #2563eb;
+            transition: all 0.2s;
+        }}
+        
+        .summary-card.filterable {{
+            cursor: pointer;
+        }}
+        
+        .summary-card.filterable:hover {{
+            background: #f3f4f6;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }}
+        
+        .summary-card.filterable.active {{
+            background: #dbeafe;
+            border-left-color: #1e40af;
         }}
         
         .summary-card h3 {{
@@ -123,6 +139,12 @@ class HTMLFormatter:
             color: #6b7280;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+        }}
+        
+        .summary-card.filterable h3::after {{
+            content: ' 👆';
+            font-size: 0.8em;
+            opacity: 0.6;
         }}
         
         .summary-card .value {{
@@ -218,6 +240,58 @@ class HTMLFormatter:
             font-size: 1.2em;
             font-weight: 600;
             color: #1e40af;
+            cursor: pointer;
+            user-select: none;
+            transition: color 0.2s;
+        }}
+        
+        .file-title:hover {{
+            color: #3b82f6;
+            text-decoration: underline;
+        }}
+        
+        .file-title.filter-active {{
+            background: #dbeafe;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }}
+        
+        .file-filter {{
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }}
+        
+        .file-filter input {{
+            flex: 1;
+            padding: 10px;
+            border: 2px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 1em;
+        }}
+        
+        .file-filter input:focus {{
+            outline: none;
+            border-color: #2563eb;
+        }}
+        
+        .file-filter button {{
+            padding: 10px 20px;
+            background: #2563eb;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+        }}
+        
+        .file-filter button:hover {{
+            background: #1e40af;
+        }}
+        
+        .file-section.hidden {{
+            display: none;
         }}
         
         .collapsible {{
@@ -333,6 +407,162 @@ class HTMLFormatter:
                 rows.forEach(row => tbody.appendChild(row));
             }});
         }});
+        
+        // File filtering functionality
+        let currentFilter = '';
+        let currentFilterType = '';
+        
+        function filterFiles(filterText) {{
+            currentFilter = filterText.toLowerCase().trim();
+            currentFilterType = '';
+            const fileSections = document.querySelectorAll('.file-section');
+            const fileTitles = document.querySelectorAll('.file-title');
+            
+            // Reset summary cards
+            document.querySelectorAll('.summary-card').forEach(card => {{
+                card.classList.remove('active');
+            }});
+            
+            fileSections.forEach(section => {{
+                const title = section.querySelector('.file-title');
+                const fileName = title ? title.textContent.toLowerCase() : '';
+                
+                if (currentFilter === '' || fileName.includes(currentFilter)) {{
+                    section.style.display = '';
+                    if (title && currentFilter !== '') {{
+                        title.classList.add('filter-active');
+                    }} else if (title) {{
+                        title.classList.remove('filter-active');
+                    }}
+                }} else {{
+                    section.style.display = 'none';
+                    if (title) {{
+                        title.classList.remove('filter-active');
+                    }}
+                }}
+            }});
+        }}
+        
+        function filterFilesByType(filterType) {{
+            currentFilterType = filterType;
+            currentFilter = '';
+            const fileSections = document.querySelectorAll('.file-section');
+            
+            // Reset summary cards
+            document.querySelectorAll('.summary-card').forEach(card => {{
+                card.classList.remove('active');
+            }});
+            
+            // Activate clicked card
+            const clickedCard = document.querySelector(`[data-filter-type="${{filterType}}"]`);
+            if (clickedCard) {{
+                clickedCard.classList.add('active');
+            }}
+            
+            // Reset filter input
+            const filterInput = document.getElementById('file-filter-input');
+            if (filterInput) {{
+                filterInput.value = '';
+            }}
+            
+            fileSections.forEach(section => {{
+                let shouldShow = false;
+                
+                switch(filterType) {{
+                    case 'todos':
+                        shouldShow = section.dataset.hasTodos === 'true';
+                        break;
+                    case 'cursor-issues':
+                        shouldShow = section.dataset.hasCursorIssues === 'true';
+                        break;
+                    case 'memory-issues':
+                        shouldShow = section.dataset.hasMemoryIssues === 'true';
+                        break;
+                    case 'high-complexity':
+                        const avgCyclo = parseFloat(section.dataset.avgCyclomatic || '0');
+                        shouldShow = avgCyclo > 5;
+                        break;
+                    case 'high-cognitive':
+                        const avgCogn = parseFloat(section.dataset.avgCognitive || '0');
+                        shouldShow = avgCogn > 8;
+                        break;
+                    default:
+                        shouldShow = true;
+                }}
+                
+                section.style.display = shouldShow ? '' : 'none';
+                
+                const title = section.querySelector('.file-title');
+                if (title) {{
+                    if (shouldShow) {{
+                        title.classList.add('filter-active');
+                    }} else {{
+                        title.classList.remove('filter-active');
+                    }}
+                }}
+            }});
+        }}
+        
+        // Filter input handler
+        const filterInput = document.getElementById('file-filter-input');
+        if (filterInput) {{
+            filterInput.addEventListener('input', function() {{
+                filterFiles(this.value);
+            }});
+        }}
+        
+        // Reset filter button
+        const resetButton = document.getElementById('file-filter-reset');
+        if (resetButton) {{
+            resetButton.addEventListener('click', function() {{
+                if (filterInput) {{
+                    filterInput.value = '';
+                }}
+                currentFilterType = '';
+                document.querySelectorAll('.summary-card').forEach(card => {{
+                    card.classList.remove('active');
+                }});
+                document.querySelectorAll('.file-section').forEach(section => {{
+                    section.style.display = '';
+                    const title = section.querySelector('.file-title');
+                    if (title) {{
+                        title.classList.remove('filter-active');
+                    }}
+                }});
+            }});
+        }}
+        
+        // Click on file title to filter
+        document.querySelectorAll('.file-title').forEach(title => {{
+            title.addEventListener('click', function(e) {{
+                // Ne pas déclencher si on clique sur le bouton collapsible
+                if (e.target.closest('.collapsible')) {{
+                    return;
+                }}
+                
+                // Reset filter type first
+                currentFilterType = '';
+                document.querySelectorAll('.summary-card').forEach(card => {{
+                    card.classList.remove('active');
+                }});
+                
+                const fileName = this.textContent.replace(/^📄\\s+/, '').trim();
+                if (filterInput) {{
+                    filterInput.value = fileName;
+                }}
+                filterFiles(fileName);
+            }});
+        }});
+        
+        // Click on summary cards to filter
+        document.querySelectorAll('.summary-card.filterable').forEach(card => {{
+            card.addEventListener('click', function() {{
+                const filterType = this.dataset.filterType;
+                if (filterType) {{
+                    filterFilesByType(filterType);
+                }}
+            }});
+        }});
     </script>
 </body>
 </html>"""
@@ -356,23 +586,23 @@ class HTMLFormatter:
                 <h3>Lignes de code</h3>
                 <div class="value">{report.total_lines:,}</div>
             </div>
-            <div class="summary-card">
+            <div class="summary-card filterable" data-filter-type="high-complexity" title="Cliquer pour filtrer les fichiers avec complexité cyclomatique élevée">
                 <h3>Complexité cyclomatique moyenne</h3>
                 <div class="value">{report.avg_cyclomatic:.2f}</div>
             </div>
-            <div class="summary-card">
+            <div class="summary-card filterable" data-filter-type="high-cognitive" title="Cliquer pour filtrer les fichiers avec complexité cognitive élevée">
                 <h3>Complexité cognitive moyenne</h3>
                 <div class="value">{report.avg_cognitive:.2f}</div>
             </div>
-            <div class="summary-card">
+            <div class="summary-card filterable" data-filter-type="todos" title="Cliquer pour filtrer les fichiers avec TODO/FIXME">
                 <h3>TODO/FIXME</h3>
                 <div class="value">{report.total_todos}</div>
             </div>
-            <div class="summary-card">
+            <div class="summary-card filterable" data-filter-type="cursor-issues" title="Cliquer pour filtrer les fichiers avec problèmes de curseurs">
                 <h3>Problèmes curseurs</h3>
                 <div class="value">{report.total_cursor_issues}</div>
             </div>
-            <div class="summary-card">
+            <div class="summary-card filterable" data-filter-type="memory-issues" title="Cliquer pour filtrer les fichiers avec problèmes mémoire">
                 <h3>Problèmes mémoire</h3>
                 <div class="value">{report.total_memory_issues}</div>
             </div>
@@ -383,7 +613,13 @@ class HTMLFormatter:
         if not report.files:
             return ""
         
-        parts = ['<h2>Fichiers analysés</h2>']
+        parts = [
+            '<h2>Fichiers analysés</h2>',
+            '<div class="file-filter">',
+            '<input type="text" id="file-filter-input" placeholder="Filtrer par nom de fichier...">',
+            '<button id="file-filter-reset">Tout afficher</button>',
+            '</div>'
+        ]
         
         for file_metrics in report.files:
             parts.append(self._html_file_section(file_metrics))
@@ -393,10 +629,21 @@ class HTMLFormatter:
     def _html_file_section(self, metrics: FileMetrics) -> str:
         """Génère la section HTML pour un fichier."""
         file_name = Path(metrics.filepath).name
+        has_todos = 'true' if metrics.todos else 'false'
+        has_cursor_issues = 'true' if (metrics.cursor_analysis and metrics.cursor_analysis.get('issues')) else 'false'
+        has_memory_issues = 'true' if (metrics.memory_analysis and metrics.memory_analysis.get('issues')) else 'false'
+        avg_cyclomatic = f'{metrics.avg_cyclomatic:.2f}'
+        avg_cognitive = f'{metrics.avg_cognitive:.2f}'
+        
         parts = [
-            f'<div class="file-section">',
+            f'<div class="file-section" data-filename="{escape(file_name)}" '
+            f'data-has-todos="{has_todos}" '
+            f'data-has-cursor-issues="{has_cursor_issues}" '
+            f'data-has-memory-issues="{has_memory_issues}" '
+            f'data-avg-cyclomatic="{avg_cyclomatic}" '
+            f'data-avg-cognitive="{avg_cognitive}">',
             f'<div class="file-header">',
-            f'<div class="file-title">📄 {escape(file_name)}</div>',
+            f'<div class="file-title" title="Cliquer pour filtrer par ce fichier">📄 {escape(file_name)}</div>',
             f'<button class="collapsible">Afficher</button>',
             f'</div>',
             f'<div class="collapsible-content">',

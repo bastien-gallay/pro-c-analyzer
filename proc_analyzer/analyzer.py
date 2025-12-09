@@ -5,7 +5,7 @@ Orchestre le prétraitement, parsing et calcul des métriques
 
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Iterator, Any, Callable
+from typing import List, Dict, Optional, Iterator, Any, Callable, Set
 import json
 
 from .preprocessor import ProCPreprocessor, ExecSqlBlock
@@ -303,6 +303,8 @@ class ProCAnalyzer:
         report = analyzer.analyze_file('program.pc')
         # ou
         report = analyzer.analyze_directory('./src', pattern='*.pc')
+        # ou avec plusieurs patterns
+        report = analyzer.analyze_directory('./src', patterns=['*.pc', '*.sc', '*.inc'])
         
     Options:
         analyzer = ProCAnalyzer(
@@ -504,7 +506,8 @@ class ProCAnalyzer:
     def analyze_directory(
         self, 
         directory: str, 
-        pattern: str = "*.pc",
+        pattern: Optional[str] = None,
+        patterns: Optional[List[str]] = None,
         recursive: bool = True,
         progress_callback: Optional[Callable[[str, int, int], None]] = None
     ) -> AnalysisReport:
@@ -513,7 +516,8 @@ class ProCAnalyzer:
         
         Args:
             directory: Chemin du répertoire
-            pattern: Pattern glob pour les fichiers (défaut: *.pc)
+            pattern: Pattern glob pour les fichiers (défaut: *.pc) - déprécié, utiliser patterns
+            patterns: Liste de patterns glob pour les fichiers (défaut: ["*.pc"])
             recursive: Recherche récursive (défaut: True)
             progress_callback: Callback optionnel appelé pour chaque fichier analysé.
                               Signature: callback(filepath: str, current: int, total: int)
@@ -530,13 +534,25 @@ class ProCAnalyzer:
         if not path.exists():
             return report
         
-        if recursive:
-            files = path.rglob(pattern)
+        # Déterminer les patterns à utiliser
+        if patterns is not None:
+            patterns_list = patterns
+        elif pattern is not None:
+            patterns_list = [pattern]
         else:
-            files = path.glob(pattern)
+            patterns_list = ["*.pc"]
         
-        # Convertir en liste pour pouvoir compter et trier
-        file_list = sorted([f for f in files if f.is_file()])
+        # Collecter tous les fichiers correspondant aux différents patterns
+        files_set: Set[Path] = set()
+        for pat in patterns_list:
+            if recursive:
+                files = path.rglob(pat)
+            else:
+                files = path.glob(pat)
+            files_set.update(f for f in files if f.is_file())
+        
+        # Convertir en liste triée pour avoir un ordre déterministe
+        file_list = sorted(files_set)
         total_files = len(file_list)
         
         for index, filepath in enumerate(file_list, 1):

@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from proc_analyzer.analyzer import ProCAnalyzer, AnalysisReport
-from proc_analyzer.cli import analyze_with_progress
+from proc_analyzer.cli import analyze_with_progress, parse_patterns
 
 
 class TestAnalyzeWithProgress:
@@ -186,3 +186,104 @@ class TestAnalyzeWithProgress:
                 call_kwargs = mock_analyze.call_args[1]
                 assert 'progress_callback' in call_kwargs
                 assert callable(call_kwargs['progress_callback'])
+
+    def test_analyze_directory_multiple_patterns(self, tmp_path, simple_proc_source):
+        """Test avec plusieurs patterns séparés par des points-virgules."""
+        (tmp_path / "file1.pc").write_text(simple_proc_source)
+        (tmp_path / "file2.sc").write_text(simple_proc_source)
+        (tmp_path / "file3.inc").write_text(simple_proc_source)
+        (tmp_path / "file4.txt").write_text("Not a Pro*C file")
+        
+        analyzer = ProCAnalyzer()
+        
+        with patch('proc_analyzer.cli.console.print'), \
+             patch('proc_analyzer.cli.Progress') as mock_progress:
+            mock_progress.return_value.__enter__.return_value.add_task.return_value = "task_id"
+            
+            report = analyze_with_progress(
+                analyzer, 
+                str(tmp_path), 
+                pattern="*.pc;*.sc;*.inc"
+            )
+        
+        assert report is not None
+        assert len(report.files) == 3  # Les trois fichiers .pc, .sc et .inc
+        filepaths = {f.filepath for f in report.files}
+        assert any("file1.pc" in fp for fp in filepaths)
+        assert any("file2.sc" in fp for fp in filepaths)
+        assert any("file3.inc" in fp for fp in filepaths)
+        assert not any("file4.txt" in fp for fp in filepaths)
+
+    def test_analyze_directory_multiple_patterns_with_spaces(self, tmp_path, simple_proc_source):
+        """Test avec plusieurs patterns avec espaces autour des points-virgules."""
+        (tmp_path / "file1.pc").write_text(simple_proc_source)
+        (tmp_path / "file2.sc").write_text(simple_proc_source)
+        
+        analyzer = ProCAnalyzer()
+        
+        with patch('proc_analyzer.cli.console.print'), \
+             patch('proc_analyzer.cli.Progress') as mock_progress:
+            mock_progress.return_value.__enter__.return_value.add_task.return_value = "task_id"
+            
+            report = analyze_with_progress(
+                analyzer, 
+                str(tmp_path), 
+                pattern="*.pc ; *.sc"
+            )
+        
+        assert report is not None
+        assert len(report.files) == 2  # Les deux fichiers
+
+    def test_analyze_directory_multiple_patterns_no_duplicates(self, tmp_path, simple_proc_source):
+        """Test que les fichiers correspondant à plusieurs patterns ne sont pas dupliqués."""
+        (tmp_path / "file1.pc").write_text(simple_proc_source)
+        
+        analyzer = ProCAnalyzer()
+        
+        with patch('proc_analyzer.cli.console.print'), \
+             patch('proc_analyzer.cli.Progress') as mock_progress:
+            mock_progress.return_value.__enter__.return_value.add_task.return_value = "task_id"
+            
+            # Le fichier .pc correspond aux deux patterns
+            report = analyze_with_progress(
+                analyzer, 
+                str(tmp_path), 
+                pattern="*.pc;*.pc"
+            )
+        
+        assert report is not None
+        assert len(report.files) == 1  # Pas de duplication
+
+
+class TestParsePatterns:
+    """Tests pour la fonction parse_patterns."""
+    
+    def test_single_pattern(self):
+        """Test avec un seul pattern."""
+        result = parse_patterns("*.pc")
+        assert result == ["*.pc"]
+    
+    def test_multiple_patterns(self):
+        """Test avec plusieurs patterns."""
+        result = parse_patterns("*.pc;*.sc;*.inc")
+        assert result == ["*.pc", "*.sc", "*.inc"]
+    
+    def test_patterns_with_spaces(self):
+        """Test avec des espaces autour des points-virgules."""
+        result = parse_patterns("*.pc ; *.sc ; *.inc")
+        assert result == ["*.pc", "*.sc", "*.inc"]
+    
+    def test_empty_pattern(self):
+        """Test avec un pattern vide."""
+        result = parse_patterns("")
+        assert result == ["*.pc"]  # Retourne le défaut
+    
+    def test_pattern_with_only_spaces(self):
+        """Test avec seulement des espaces."""
+        result = parse_patterns("   ")
+        assert result == ["*.pc"]  # Retourne le défaut
+    
+    def test_pattern_with_empty_segments(self):
+        """Test avec des segments vides."""
+        result = parse_patterns("*.pc;;*.sc")
+        assert result == ["*.pc", "*.sc"]  # Ignore les segments vides

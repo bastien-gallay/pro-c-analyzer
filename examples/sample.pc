@@ -1,0 +1,353 @@
+/*
+ * Module: sample.pc - Gestion des employés
+ * Description: Module de démonstration pour l'analyseur Pro*C.
+ *              Gère les opérations CRUD sur les employés.
+ * Author: Bastien
+ * Date: 2024-01-15
+ * Version: 1.0
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+/* Variables hôtes Oracle */
+EXEC SQL BEGIN DECLARE SECTION;
+    char    username[32];
+    char    password[32];
+    int     emp_id;
+    char    emp_name[64];
+    float   emp_salary;
+    int     dept_id;
+    char    sql_error_msg[512];
+    short   indicator_var;
+EXEC SQL END DECLARE SECTION;
+
+EXEC SQL INCLUDE sqlca;
+
+/* Gestion des erreurs SQL */
+EXEC SQL WHENEVER SQLERROR DO sql_error_handler();
+EXEC SQL WHENEVER NOT FOUND DO not_found_handler();
+
+/*
+ * Connexion à la base de données
+ * Complexité cyclomatique: 3
+ * Complexité cognitive: 2
+ */
+int connect_db(const char *user, const char *pass) {
+    strcpy(username, user);
+    strcpy(password, pass);
+    
+    EXEC SQL CONNECT :username IDENTIFIED BY :password;
+    
+    if (sqlca.sqlcode != 0) {
+        printf("Erreur connexion: %s\n", sqlca.sqlerrm.sqlerrmc);
+        return -1;
+    }
+    
+    printf("Connexion réussie\n");
+    return 0;
+}
+
+/*
+ * Recherche un employé par ID
+ * Complexité cyclomatique: 4
+ * Complexité cognitive: 5
+ */
+int find_employee(int id) {
+    char *buffer;  /* TODO: utiliser un buffer statique */
+    
+    /* FIXME: Cette fonction ne gère pas les erreurs correctement */
+    buffer = malloc(256);  /* Allocation sans vérification */
+    
+    emp_id = id;
+    
+    EXEC SQL SELECT emp_name, salary, dept_id
+             INTO :emp_name, :emp_salary:indicator_var, :dept_id
+             FROM employees
+             WHERE emp_id = :emp_id;
+    
+    if (sqlca.sqlcode == 0) {
+        if (indicator_var == -1) {
+            printf("Employé %d: %s, salaire: NULL, dept: %d\n", 
+                   emp_id, emp_name, dept_id);
+        } else {
+            printf("Employé %d: %s, salaire: %.2f, dept: %d\n", 
+                   emp_id, emp_name, emp_salary, dept_id);
+        }
+        /* XXX: buffer jamais libéré - fuite mémoire */
+        return 0;
+    } else if (sqlca.sqlcode == 1403) {
+        printf("Employé %d non trouvé\n", id);
+        return -1;
+    }
+    
+    return -2;
+}
+
+/*
+ * Met à jour le salaire avec validation
+ * Complexité cyclomatique: 8
+ * Complexité cognitive: 12
+ */
+int update_salary(int id, float new_salary, int validate) {
+    float old_salary;
+    float max_increase;
+    
+    /* Récupérer l'ancien salaire */
+    emp_id = id;
+    EXEC SQL SELECT salary INTO :old_salary
+             FROM employees WHERE emp_id = :emp_id;
+    
+    if (sqlca.sqlcode != 0) {
+        return -1;
+    }
+    
+    /* Validation complexe */
+    if (validate) {
+        max_increase = old_salary * 0.20;  /* Max 20% d'augmentation */
+        
+        if (new_salary < 0) {
+            printf("Erreur: salaire négatif\n");
+            return -2;
+        }
+        
+        if (new_salary > old_salary + max_increase) {
+            if (new_salary > old_salary * 2) {
+                printf("Erreur: augmentation excessive (>100%%)\n");
+                return -3;
+            } else {
+                printf("Warning: augmentation > 20%%\n");
+                /* Continue quand même */
+            }
+        }
+        
+        /* Vérification supplémentaire selon le département */
+        if (dept_id == 10 || dept_id == 20) {
+            if (new_salary > 100000 && old_salary <= 100000) {
+                printf("Validation manager requise pour dept %d\n", dept_id);
+                return -4;
+            }
+        }
+    }
+    
+    /* Mise à jour */
+    emp_salary = new_salary;
+    EXEC SQL UPDATE employees 
+             SET salary = :emp_salary
+             WHERE emp_id = :emp_id;
+    
+    if (sqlca.sqlcode == 0) {
+        EXEC SQL COMMIT;
+        printf("Salaire mis à jour: %.2f -> %.2f\n", old_salary, new_salary);
+        return 0;
+    }
+    
+    EXEC SQL ROLLBACK;
+    return -5;
+}
+
+/*
+ * Liste tous les employés d'un département avec curseur
+ * Complexité cyclomatique: 5
+ * Complexité cognitive: 6
+ */
+int list_department_employees(int department) {
+    int count = 0;
+    
+    EXEC SQL DECLARE emp_cursor CURSOR FOR
+        SELECT emp_id, emp_name, salary
+        FROM employees
+        WHERE dept_id = :department
+        ORDER BY emp_name;
+    
+    EXEC SQL OPEN emp_cursor;
+    
+    printf("\n=== Employés du département %d ===\n", department);
+    
+    while (1) {
+        EXEC SQL FETCH emp_cursor 
+                 INTO :emp_id, :emp_name, :emp_salary:indicator_var;
+        
+        if (sqlca.sqlcode == 1403) {
+            break;  /* Plus de données */
+        }
+        
+        if (sqlca.sqlcode != 0) {
+            printf("Erreur fetch: %d\n", sqlca.sqlcode);
+            break;
+        }
+        
+        count++;
+        if (indicator_var == -1) {
+            printf("  %d. %s (salaire: N/A)\n", count, emp_name);
+        } else {
+            printf("  %d. %s (salaire: %.2f)\n", count, emp_name, emp_salary);
+        }
+    }
+    
+    EXEC SQL CLOSE emp_cursor;
+    
+    printf("Total: %d employés\n", count);
+    return count;
+}
+
+/*
+ * Fonction très complexe pour démonstration
+ * Complexité cyclomatique: élevée
+ * Complexité cognitive: très élevée
+ */
+int complex_business_logic(int operation, int *data, int size) {
+    int i, j;
+    int result = 0;
+    int temp;
+    
+    switch (operation) {
+        case 1:  /* Opération simple */
+            for (i = 0; i < size; i++) {
+                result += data[i];
+            }
+            break;
+            
+        case 2:  /* Opération avec conditions */
+            for (i = 0; i < size; i++) {
+                if (data[i] > 0) {
+                    if (data[i] > 100) {
+                        result += data[i] * 2;
+                    } else if (data[i] > 50) {
+                        result += data[i] + 10;
+                    } else {
+                        result += data[i];
+                    }
+                } else if (data[i] < 0) {
+                    result -= data[i];
+                }
+            }
+            break;
+            
+        case 3:  /* Opération avec boucles imbriquées */
+            for (i = 0; i < size; i++) {
+                for (j = i + 1; j < size; j++) {
+                    if (data[i] > data[j]) {
+                        temp = data[i];
+                        data[i] = data[j];
+                        data[j] = temp;
+                    }
+                }
+            }
+            result = data[0];
+            break;
+            
+        case 4:  /* Opération avec conditions logiques complexes */
+            for (i = 0; i < size; i++) {
+                if ((data[i] > 0 && data[i] < 100) || 
+                    (data[i] >= 100 && data[i] % 2 == 0)) {
+                    result++;
+                }
+                if (data[i] > 0 && data[i] < 50 && data[i] % 3 == 0) {
+                    result += 2;
+                }
+            }
+            break;
+            
+        default:
+            result = -1;
+            break;
+    }
+    
+    return result;
+}
+
+/*
+ * Gestionnaire d'erreurs SQL
+ */
+void sql_error_handler(void) {
+    EXEC SQL WHENEVER SQLERROR CONTINUE;
+    
+    printf("Erreur SQL: %s\n", sqlca.sqlerrm.sqlerrmc);
+    
+    EXEC SQL ROLLBACK;
+}
+
+/*
+ * HACK: Fonction de copie non sécurisée
+ * TODO: Remplacer par une version avec vérification de taille
+ */
+void unsafe_copy(char *dest, const char *src) {
+    /* WARNING: strcpy est dangereux ! */
+    strcpy(dest, src);  /* Buffer overflow potentiel */
+}
+
+/*
+ * Fonction avec curseur imbriqué (anti-pattern)
+ * NOTE: Cette fonction démontre un mauvais pattern
+ */
+int nested_cursor_example(void) {
+    int dept_count = 0;
+    
+    /* Curseur externe pour les départements */
+    EXEC SQL DECLARE dept_cursor CURSOR FOR
+        SELECT dept_id FROM departments;
+    
+    EXEC SQL OPEN dept_cursor;
+    
+    while (1) {
+        EXEC SQL FETCH dept_cursor INTO :dept_id;
+        if (sqlca.sqlcode != 0) break;
+        
+        /* FIXME: Curseur imbriqué - très mauvais pour les performances */
+        EXEC SQL DECLARE inner_cursor CURSOR FOR
+            SELECT emp_name FROM employees WHERE dept_id = :dept_id;
+        
+        EXEC SQL OPEN inner_cursor;
+        
+        while (1) {
+            EXEC SQL FETCH inner_cursor INTO :emp_name;
+            if (sqlca.sqlcode != 0) break;
+            printf("  Employee: %s\n", emp_name);
+        }
+        
+        EXEC SQL CLOSE inner_cursor;
+        dept_count++;
+    }
+    
+    EXEC SQL CLOSE dept_cursor;
+    return dept_count;
+}
+
+/*
+ * Gestionnaire NOT FOUND
+ */
+void not_found_handler(void) {
+    /* Pas d'action particulière */
+}
+
+/*
+ * Programme principal
+ */
+int main(int argc, char *argv[]) {
+    int rc;
+    int test_data[] = {15, 82, 3, 47, 99, 21, 56};
+    
+    if (argc < 3) {
+        printf("Usage: %s username password\n", argv[0]);
+        return 1;
+    }
+    
+    rc = connect_db(argv[1], argv[2]);
+    if (rc != 0) {
+        return 1;
+    }
+    
+    /* Tests */
+    find_employee(101);
+    list_department_employees(10);
+    
+    printf("\nTest logique métier: %d\n", 
+           complex_business_logic(2, test_data, 7));
+    
+    /* Déconnexion */
+    EXEC SQL COMMIT WORK RELEASE;
+    
+    return 0;
+}

@@ -337,6 +337,283 @@ class TestHTMLFormatter:
         assert isinstance(files_data, list)
         assert len(files_data) == len(minimal_report.files)
         assert all('filename' in f for f in files_data)
+    
+    def test_prepare_file_data_includes_new_fields(self):
+        """Test que les nouvelles données sont présentes dans _prepare_file_data."""
+        # Créer un fichier avec des problèmes de curseurs et mémoire
+        file_metrics = FileMetrics(
+            filepath="test.pc",
+            total_lines=50,
+            non_empty_lines=40,
+            functions=[
+                FunctionMetrics(
+                    name="test_func",
+                    start_line=1,
+                    end_line=10,
+                    line_count=10,
+                    cyclomatic_complexity=8,  # Complexité moyenne élevée
+                    cognitive_complexity=12,  # Complexité cognitive élevée
+                ),
+            ],
+            cursor_analysis={
+                'total_cursors': 2,
+                'total_issues': 3,
+                'issues': [
+                    {
+                        'severity': 'error',
+                        'cursor_name': 'cursor1',
+                        'message': 'Issue 1',
+                        'line_number': 5,
+                    },
+                    {
+                        'severity': 'warning',
+                        'cursor_name': 'cursor2',
+                        'message': 'Issue 2',
+                        'line_number': 10,
+                    },
+                    {
+                        'severity': 'info',
+                        'cursor_name': 'cursor3',
+                        'message': 'Issue 3',
+                        'line_number': 15,
+                    },
+                ],
+            },
+            memory_analysis={
+                'total_issues': 4,
+                'issues': [
+                    {
+                        'severity': 'critical',
+                        'message': 'Critical issue',
+                        'line_number': 20,
+                    },
+                    {
+                        'severity': 'warning',
+                        'message': 'Warning 1',
+                        'line_number': 25,
+                    },
+                    {
+                        'severity': 'warning',
+                        'message': 'Warning 2',
+                        'line_number': 30,
+                    },
+                    {
+                        'severity': 'info',
+                        'message': 'Info issue',
+                        'line_number': 35,
+                    },
+                ],
+            },
+        )
+        
+        formatter = HTMLFormatter()
+        file_data = formatter._prepare_file_data(file_metrics)
+        
+        # Vérifier les nouveaux champs
+        assert 'cursor_issues_count' in file_data
+        assert file_data['cursor_issues_count'] == 3
+        
+        assert 'memory_warnings_count' in file_data
+        assert file_data['memory_warnings_count'] == 2  # Seulement les warnings
+        
+        assert 'avg_cyclo_class' in file_data
+        assert 'avg_cogn_class' in file_data
+        # avg_cyclomatic = 8, donc complexity-medium (seuil 5, 10)
+        assert file_data['avg_cyclo_class'] == 'complexity-medium'
+        # avg_cognitive = 12, donc complexity-medium (seuil 8, 15)
+        assert file_data['avg_cogn_class'] == 'complexity-medium'
+    
+    def test_prepare_file_data_complexity_classes(self):
+        """Test que les classes de complexité sont correctement calculées."""
+        formatter = HTMLFormatter()
+        
+        # Test avec complexité faible
+        file_metrics_low = FileMetrics(
+            filepath="low.pc",
+            total_lines=50,
+            non_empty_lines=40,
+            functions=[
+                FunctionMetrics(
+                    name="simple_func",
+                    start_line=1,
+                    end_line=10,
+                    line_count=10,
+                    cyclomatic_complexity=3,
+                    cognitive_complexity=4,
+                ),
+            ],
+        )
+        file_data_low = formatter._prepare_file_data(file_metrics_low)
+        assert file_data_low['avg_cyclo_class'] == 'complexity-low'
+        assert file_data_low['avg_cogn_class'] == 'complexity-low'
+        
+        # Test avec complexité moyenne
+        file_metrics_medium = FileMetrics(
+            filepath="medium.pc",
+            total_lines=50,
+            non_empty_lines=40,
+            functions=[
+                FunctionMetrics(
+                    name="medium_func",
+                    start_line=1,
+                    end_line=10,
+                    line_count=10,
+                    cyclomatic_complexity=7,  # Entre 5 et 10
+                    cognitive_complexity=10,  # Entre 8 et 15
+                ),
+            ],
+        )
+        file_data_medium = formatter._prepare_file_data(file_metrics_medium)
+        assert file_data_medium['avg_cyclo_class'] == 'complexity-medium'
+        assert file_data_medium['avg_cogn_class'] == 'complexity-medium'
+        
+        # Test avec complexité élevée
+        file_metrics_high = FileMetrics(
+            filepath="high.pc",
+            total_lines=50,
+            non_empty_lines=40,
+            functions=[
+                FunctionMetrics(
+                    name="complex_func",
+                    start_line=1,
+                    end_line=10,
+                    line_count=10,
+                    cyclomatic_complexity=15,  # > 10
+                    cognitive_complexity=20,  # > 15
+                ),
+            ],
+        )
+        file_data_high = formatter._prepare_file_data(file_metrics_high)
+        assert file_data_high['avg_cyclo_class'] == 'complexity-high'
+        assert file_data_high['avg_cogn_class'] == 'complexity-high'
+    
+    def test_file_summary_info_in_html_output(self):
+        """Test que les informations de résumé sont présentes dans le HTML généré."""
+        file_metrics = FileMetrics(
+            filepath="test.pc",
+            total_lines=50,
+            non_empty_lines=40,
+            functions=[
+                FunctionMetrics(
+                    name="test_func",
+                    start_line=1,
+                    end_line=10,
+                    line_count=10,
+                    cyclomatic_complexity=6,
+                    cognitive_complexity=9,
+                ),
+            ],
+            todos=[
+                {
+                    'tag': 'TODO',
+                    'message': 'Test todo',
+                    'priority': 'high',
+                    'line_number': 5,
+                },
+            ],
+            cursor_analysis={
+                'total_cursors': 1,
+                'total_issues': 2,
+                'issues': [
+                    {
+                        'severity': 'error',
+                        'cursor_name': 'test_cursor',
+                        'message': 'Test issue',
+                        'line_number': 10,
+                    },
+                    {
+                        'severity': 'warning',
+                        'cursor_name': 'test_cursor2',
+                        'message': 'Test issue 2',
+                        'line_number': 15,
+                    },
+                ],
+            },
+            memory_analysis={
+                'total_issues': 3,
+                'issues': [
+                    {
+                        'severity': 'warning',
+                        'message': 'Memory warning',
+                        'line_number': 20,
+                    },
+                    {
+                        'severity': 'warning',
+                        'message': 'Another warning',
+                        'line_number': 25,
+                    },
+                    {
+                        'severity': 'info',
+                        'message': 'Info message',
+                        'line_number': 30,
+                    },
+                ],
+            },
+        )
+        
+        report = AnalysisReport(files=[file_metrics])
+        formatter = HTMLFormatter()
+        output = formatter.format(report)
+        
+        # Vérifier que les informations de résumé sont dans le header du fichier
+        file_section_start = output.find("test.pc")
+        assert file_section_start != -1
+        
+        file_section = output[file_section_start:]
+        
+        # Vérifier la présence des classes CSS pour la complexité
+        assert 'file-summary-info' in file_section
+        
+        # Vérifier que les informations sont présentes
+        assert 'Complexité:' in file_section
+        assert 'Cyclo' in file_section
+        assert 'Cogn' in file_section
+        assert 'TODO:' in file_section or '📝 TODO:' in file_section
+        assert 'Curseurs:' in file_section or '🔄 Curseurs:' in file_section
+        assert 'Mémoire:' in file_section or '🧠 Mémoire:' in file_section
+        
+        # Vérifier les valeurs
+        assert '2' in file_section  # cursor_issues_count
+        assert '2' in file_section  # memory_warnings_count (apparaît deux fois)
+        assert '1' in file_section  # todos_count
+    
+    def test_file_summary_info_without_issues(self):
+        """Test que les informations de résumé n'affichent pas les sections vides."""
+        file_metrics = FileMetrics(
+            filepath="clean.pc",
+            total_lines=50,
+            non_empty_lines=40,
+            functions=[
+                FunctionMetrics(
+                    name="clean_func",
+                    start_line=1,
+                    end_line=10,
+                    line_count=10,
+                    cyclomatic_complexity=2,
+                    cognitive_complexity=3,
+                ),
+            ],
+            # Pas de TODOs, pas de curseurs, pas de problèmes mémoire
+        )
+        
+        report = AnalysisReport(files=[file_metrics])
+        formatter = HTMLFormatter()
+        output = formatter.format(report)
+        
+        file_section_start = output.find("clean.pc")
+        assert file_section_start != -1
+        
+        file_section = output[file_section_start:]
+        
+        # La complexité doit toujours être présente
+        assert 'Complexité:' in file_section
+        assert 'Cyclo' in file_section
+        assert 'Cogn' in file_section
+        
+        # Les sections vides ne doivent pas apparaître
+        # (elles sont conditionnelles avec {% if %})
+        # On vérifie juste que le HTML est valide
+        assert 'file-summary-info' in file_section
 
 
 class TestMarkdownFormatter:

@@ -5,7 +5,31 @@
     data-avg-cyclomatic="{{ file_data.avg_cyclomatic }}" 
     data-avg-cognitive="{{ file_data.avg_cognitive }}">
     <div class="file-header">
+        <div class="file-header-left">
         <div class="file-title" title="Cliquer pour filtrer par ce fichier">📄 {{ file_data.filename|e }}</div>
+            <div class="file-summary-info">
+                <span class="info-item">
+                    <strong>Complexité:</strong> 
+                    <span class="{{ file_data.avg_cyclo_class }}">Cyclo {{ file_data.avg_cyclomatic }}</span>
+                    <span class="{{ file_data.avg_cogn_class }}">Cogn {{ file_data.avg_cognitive }}</span>
+                </span>
+                {% if file_data.todos_count > 0 %}
+                <span class="info-item">
+                    <strong>📝 TODO:</strong> {{ file_data.todos_count }}
+                </span>
+                {% endif %}
+                {% if file_data.cursor_issues_count > 0 %}
+                <span class="info-item">
+                    <strong>🔄 Curseurs:</strong> {{ file_data.cursor_issues_count }}
+                </span>
+                {% endif %}
+                {% if file_data.memory_warnings_count > 0 %}
+                <span class="info-item">
+                    <strong>🧠 Mémoire:</strong> {{ file_data.memory_warnings_count }}
+                </span>
+                {% endif %}
+            </div>
+        </div>
         <button class="collapsible">Afficher</button>
     </div>
     <div class="collapsible-content">

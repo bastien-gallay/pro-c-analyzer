@@ -160,6 +160,7 @@ class HTMLFormatter:
         
         # Grouper les problèmes mémoire par sévérité
         memory_issues_by_severity = {'critical': [], 'error': [], 'warning': [], 'info': []}
+        memory_warnings_count = 0
         if metrics.memory_analysis and metrics.memory_analysis.get('issues'):
             for issue in metrics.memory_analysis['issues']:
                 severity = issue.get('severity', 'info')
@@ -168,6 +169,14 @@ class HTMLFormatter:
                     'line_number': issue.get('line_number', 0),
                     'recommendation': issue.get('recommendation', ''),
                 })
+                if severity == 'warning':
+                    memory_warnings_count += 1
+        
+        # Calculer les classes de complexité pour les moyennes du fichier
+        avg_cyclo_int = int(metrics.avg_cyclomatic)
+        avg_cogn_int = int(metrics.avg_cognitive)
+        avg_cyclo_class = self._complexity_class(avg_cyclo_int, 5, 10)
+        avg_cogn_class = self._complexity_class(avg_cogn_int, 8, 15)
         
         return {
             'filename': file_name,
@@ -176,12 +185,16 @@ class HTMLFormatter:
             'has_memory_issues': 'true' if (metrics.memory_analysis and metrics.memory_analysis.get('issues')) else 'false',
             'avg_cyclomatic': f'{metrics.avg_cyclomatic:.2f}',
             'avg_cognitive': f'{metrics.avg_cognitive:.2f}',
+            'avg_cyclo_class': avg_cyclo_class,
+            'avg_cogn_class': avg_cogn_class,
             'total_lines': metrics.total_lines,
             'non_empty_lines': metrics.non_empty_lines,
             'function_count': metrics.function_count,
             'total_sql_blocks': metrics.total_sql_blocks,
             'todos_count': len(metrics.todos) if metrics.todos else 0,
             'high_todos_count': sum(1 for t in metrics.todos if t.get('priority') == 'high') if metrics.todos else 0,
+            'cursor_issues_count': len(cursor_issues),
+            'memory_warnings_count': memory_warnings_count,
             'functions': functions_data,
             'todos': metrics.todos if metrics.todos else [],
             'todos_by_priority': todos_by_priority,

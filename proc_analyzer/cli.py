@@ -3,6 +3,7 @@ Interface ligne de commande pour l'analyseur Pro*C
 """
 
 import csv
+import fnmatch
 from pathlib import Path
 from typing import Optional, List, Set
 
@@ -13,7 +14,7 @@ from rich.panel import Panel
 from rich import box
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeRemainingColumn
 
-from .analyzer import ProCAnalyzer, AnalysisReport, FileMetrics
+from .analyzer import ProCAnalyzer, AnalysisReport, FileMetrics, ModuleInventory
 from .formatters import JSONFormatter, HTMLFormatter, MarkdownFormatter
 
 
@@ -40,7 +41,64 @@ def parse_patterns(pattern_str: str) -> List[str]:
     return patterns if patterns else ["*.pc"]
 
 
-def analyze_with_progress(analyzer: ProCAnalyzer, path: str, pattern: str = "*.pc", recursive: bool = True) -> AnalysisReport:
+def match_case_insensitive(filename: str, pattern: str) -> bool:
+    """
+    Vérifie si un nom de fichier correspond à un pattern de manière insensible à la casse.
+    
+    Args:
+        filename: Nom du fichier à tester
+        pattern: Pattern glob à utiliser
+        
+    Returns:
+        True si le fichier correspond au pattern, False sinon
+    """
+    return fnmatch.fnmatch(filename.casefold(), pattern.casefold())
+
+
+def find_files_case_insensitive(
+    path_obj: Path, 
+    patterns: List[str], 
+    recursive: bool = True
+) -> Set[Path]:
+    """
+    Trouve les fichiers correspondant aux patterns de manière insensible à la casse.
+    
+    Args:
+        path_obj: Chemin du répertoire de base
+        patterns: Liste de patterns glob à utiliser
+        recursive: Si True, recherche récursive
+        
+    Returns:
+        Ensemble de chemins de fichiers correspondant aux patterns
+    """
+    files_set: Set[Path] = set()
+    
+    # Lister tous les fichiers du répertoire
+    if recursive:
+        # Parcourir récursivement tous les fichiers avec rglob
+        # rglob('**/*') liste tous les fichiers récursivement
+        all_files = [f for f in path_obj.rglob('**/*') if f.is_file()]
+    else:
+        all_files = [f for f in path_obj.glob('*') if f.is_file()]
+    
+    # Filtrer par patterns insensibles à la casse
+    for file_path in all_files:
+        # Vérifier si le fichier correspond à au moins un pattern
+        for pattern in patterns:
+            if match_case_insensitive(file_path.name, pattern):
+                files_set.add(file_path)
+                break
+    
+    return files_set
+
+
+def analyze_with_progress(
+    analyzer: ProCAnalyzer, 
+    path: str, 
+    pattern: Optional[str] = None, 
+    ipattern: Optional[str] = None,
+    recursive: bool = True
+) -> AnalysisReport:
     """
     Analyse un fichier ou répertoire avec affichage de la progression.
     
@@ -48,7 +106,9 @@ def analyze_with_progress(analyzer: ProCAnalyzer, path: str, pattern: str = "*.p
         analyzer: Instance de ProCAnalyzer
         path: Chemin du fichier ou répertoire à analyser
         pattern: Pattern(s) glob pour les fichiers, séparés par des points-virgules
-                 (ex: "*.pc;*.sc;*.inc") (ignoré si path est un fichier)
+                 (ex: "*.pc;*.sc;*.inc") (ignoré si path est un fichier ou si ipattern est fourni)
+        ipattern: Pattern(s) glob insensible à la casse pour les fichiers, séparés par des points-virgules
+                  (ex: "*.PC;*.SC") (ignoré si path est un fichier, prioritaire sur pattern)
         recursive: Recherche récursive (ignoré si path est un fichier)
         
     Returns:
@@ -65,18 +125,30 @@ def analyze_with_progress(analyzer: ProCAnalyzer, path: str, pattern: str = "*.p
         return report
     
     # Parser les patterns multiples
-    patterns = parse_patterns(pattern)
+    # ipattern est prioritaire sur pattern
+    if ipattern is not None:
+        patterns = parse_patterns(ipattern)
+        use_case_insensitive = True
+    elif pattern is not None:
+        patterns = parse_patterns(pattern)
+        use_case_insensitive = False
+    else:
+        patterns = ["*.pc"]
+        use_case_insensitive = False
     
     # Analyse d'un répertoire avec barre de progression
     # D'abord, compter les fichiers pour initialiser la barre
     # Collecter tous les fichiers correspondant aux différents patterns
-    files_set: Set[Path] = set()
-    for pat in patterns:
-        if recursive:
-            files_list = list(path_obj.rglob(pat))
-        else:
-            files_list = list(path_obj.glob(pat))
-        files_set.update(f for f in files_list if f.is_file())
+    if use_case_insensitive:
+        files_set = find_files_case_insensitive(path_obj, patterns, recursive)
+    else:
+        files_set: Set[Path] = set()
+        for pat in patterns:
+            if recursive:
+                files_list = list(path_obj.rglob(pat))
+            else:
+                files_list = list(path_obj.glob(pat))
+            files_set.update(f for f in files_list if f.is_file())
     
     # Trier pour avoir un ordre déterministe
     files_list = sorted(files_set)
@@ -101,21 +173,43 @@ def analyze_with_progress(analyzer: ProCAnalyzer, path: str, pattern: str = "*.p
     ) as progress:
         task = progress.add_task("[cyan]Analyse en cours...", total=total_files)
         
-        # Callback pour mettre à jour la progression
-        def update_progress(filepath: str, current: int, total: int):
-            file_name = Path(filepath).name
-            progress.update(
-                task,
-                completed=current,
-                description=f"[cyan]Analyse: {file_name}"
+        # Si on utilise la recherche insensible à la casse, analyser directement les fichiers trouvés
+        # car analyze_directory utilise rglob qui est sensible à la casse
+        if use_case_insensitive:
+            # Initialiser l'inventaire des modules si nécessaire
+            if analyzer.enable_todos:
+                analyzer.module_inventory = ModuleInventory()
+            
+            # Analyser directement les fichiers trouvés
+            report = AnalysisReport()
+            for index, filepath in enumerate(files_list, 1):
+                file_name = filepath.name
+                progress.update(
+                    task,
+                    completed=index - 1,
+                    description=f"[cyan]Analyse: {file_name}"
+                )
+                metrics = analyzer.analyze_file(str(filepath))
+                report.files.append(metrics)
+            
+            if analyzer.enable_todos:
+                report.module_inventory = analyzer.module_inventory.to_dict()
+        else:
+            # Callback pour mettre à jour la progression
+            def update_progress(filepath: str, current: int, total: int):
+                file_name = Path(filepath).name
+                progress.update(
+                    task,
+                    completed=current,
+                    description=f"[cyan]Analyse: {file_name}"
+                )
+            
+            report = analyzer.analyze_directory(
+                path, 
+                patterns=patterns, 
+                recursive=recursive,
+                progress_callback=update_progress
             )
-        
-        report = analyzer.analyze_directory(
-            path, 
-            patterns=patterns, 
-            recursive=recursive,
-            progress_callback=update_progress
-        )
     
     console.print(f"[green]✓ Analyse terminée: {len(report.files)} fichier(s) analysé(s)[/green]")
     return report
@@ -454,7 +548,8 @@ def cli():
 
 @cli.command()
 @click.argument('path', type=click.Path(exists=True))
-@click.option('--pattern', '-p', default='*.pc', help='Pattern(s) glob pour les fichiers, séparés par des points-virgules (ex: "*.pc;*.sc;*.inc") (défaut: *.pc)')
+@click.option('--pattern', '-p', default=None, help='Pattern(s) glob pour les fichiers, séparés par des points-virgules (ex: "*.pc;*.sc;*.inc") (défaut: *.pc)')
+@click.option('--ipattern', '-i', default=None, help='Pattern(s) glob insensible à la casse pour les fichiers, séparés par des points-virgules (ex: "*.PC;*.SC") (prioritaire sur --pattern)')
 @click.option('--format', '-f', 'output_format', type=click.Choice(['text', 'json', 'json-pretty', 'html', 'markdown', 'csv']), default='text', help='Format de sortie')
 @click.option('--output', '-o', type=click.Path(), help='Fichier de sortie (requis pour html/markdown, optionnel pour json/csv)')
 @click.option('--threshold-cyclo', '-tc', default=10, help='Seuil complexité cyclomatique (défaut: 10)')
@@ -467,7 +562,8 @@ def cli():
 @click.option('--no-memory', is_flag=True, help='Désactiver l\'analyse mémoire')
 def analyze(
     path: str,
-    pattern: str,
+    pattern: Optional[str],
+    ipattern: Optional[str],
     output_format: str,
     output: Optional[str],
     threshold_cyclo: int,
@@ -492,6 +588,8 @@ def analyze(
         
         proc-analyzer analyze ./src --pattern "*.pc;*.sc;*.inc"
         
+        proc-analyzer analyze ./src --ipattern "*.PC;*.SC"  # Insensible à la casse
+        
         proc-analyzer analyze ./src -f json -o report.json
         
         proc-analyzer analyze ./src -v  # Mode verbeux avec Halstead
@@ -508,7 +606,11 @@ def analyze(
         border_style="blue"
     ))
     
-    report = analyze_with_progress(analyzer, path, pattern, recursive)
+    # Si aucun pattern n'est fourni, utiliser le défaut
+    if pattern is None and ipattern is None:
+        pattern = "*.pc"
+    
+    report = analyze_with_progress(analyzer, path, pattern, ipattern, recursive)
     
     if not report.files:
         console.print("[yellow]Aucun fichier trouvé.[/yellow]")

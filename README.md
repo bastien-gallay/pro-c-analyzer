@@ -36,6 +36,9 @@ proc-analyzer analyze ./src --pattern "*.pc"
 # Plusieurs patterns séparés par des points-virgules
 proc-analyzer analyze ./src --pattern "*.pc;*.sc;*.inc"
 
+# Pattern insensible à la casse (trouve *.pc, *.PC, *.Pc, etc.)
+proc-analyzer analyze ./src --ipattern "*.PC;*.SC"
+
 # Mode verbeux (Halstead, détails)
 proc-analyzer analyze ./src -v
 ```
@@ -76,6 +79,8 @@ proc-analyzer analyze ./src -f csv -o rapport.csv
 
 ```
 --pattern, -p      Pattern(s) glob, séparés par des points-virgules (ex: "*.pc;*.sc;*.inc") (défaut: *.pc)
+--ipattern, -i     Pattern(s) glob insensible à la casse, séparés par des points-virgules (ex: "*.PC;*.SC")
+                   (prioritaire sur --pattern si les deux sont fournis)
 --format, -f       Format: text, json, json-pretty, html, markdown, csv
                    (défaut: text)
 --output, -o       Fichier de sortie (requis pour html/markdown)
@@ -100,13 +105,13 @@ proc-analyzer analyze ./src -f csv -o rapport.csv
 
 #### Détails des formats
 
-**JSON (json/json-pretty)**
+##### JSON (json/json-pretty)
 
 - Structure avec métadonnées (version, date de génération)
 - `json` : format compact sans indentation
 - `json-pretty` : format lisible avec indentation (recommandé)
 
-**HTML**
+##### HTML
 
 - Rapport interactif autonome (CSS et JavaScript inclus)
 - Tableaux triables
@@ -114,7 +119,7 @@ proc-analyzer analyze ./src -f csv -o rapport.csv
 - Code couleur pour les niveaux de complexité
 - Navigation facilitée
 
-**Markdown**
+##### Markdown
 
 - Format texte structuré compatible GitHub/GitLab
 - Tableaux au format Markdown

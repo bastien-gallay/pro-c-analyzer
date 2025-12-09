@@ -3,9 +3,9 @@ Fixtures partagées pour les tests pytest.
 """
 
 import pytest
-from pathlib import Path
-from proc_analyzer.preprocessor import ProCPreprocessor
+
 from proc_analyzer.parser import ProCParser
+from proc_analyzer.preprocessor import ProCPreprocessor
 
 
 @pytest.fixture

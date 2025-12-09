@@ -8,13 +8,13 @@ Ce module fournit différents formats de sortie pour les rapports d'analyse :
 """
 
 from .base import BaseFormatter
-from .json_formatter import JSONFormatter
 from .html_formatter import HTMLFormatter
+from .json_formatter import JSONFormatter
 from .markdown_formatter import MarkdownFormatter
 
 __all__ = [
-    'BaseFormatter',
-    'JSONFormatter',
-    'HTMLFormatter',
-    'MarkdownFormatter',
+    "BaseFormatter",
+    "JSONFormatter",
+    "HTMLFormatter",
+    "MarkdownFormatter",
 ]

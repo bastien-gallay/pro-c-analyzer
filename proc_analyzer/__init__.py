@@ -7,17 +7,17 @@ __version__ = "0.2.0"
 __author__ = "Bastien"
 
 from .analyzer import ProCAnalyzer
-from .preprocessor import ProCPreprocessor
-from .cyclomatic import CyclomaticCalculator
 from .cognitive import CognitiveCalculator
+from .comments import CommentAnalyzer, ModuleInfo, ModuleInventory, TodoItem
+from .cursors import CursorAnalysisResult, CursorAnalyzer
+from .cyclomatic import CyclomaticCalculator
 from .halstead import HalsteadCalculator, HalsteadMetrics
-from .comments import CommentAnalyzer, TodoItem, ModuleInfo, ModuleInventory
-from .cursors import CursorAnalyzer, CursorAnalysisResult
-from .memory import MemoryAnalyzer, MemoryAnalysisResult
+from .memory import MemoryAnalysisResult, MemoryAnalyzer
+from .preprocessor import ProCPreprocessor
 
 __all__ = [
     "ProCAnalyzer",
-    "ProCPreprocessor", 
+    "ProCPreprocessor",
     "CyclomaticCalculator",
     "CognitiveCalculator",
     "HalsteadCalculator",

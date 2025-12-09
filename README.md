@@ -3,7 +3,6 @@
 [![CI](https://github.com/USERNAME/proc-analyzer/workflows/CI/badge.svg)](https://github.com/USERNAME/proc-analyzer/actions/workflows/ci.yml)
 [![Code Quality](https://github.com/USERNAME/proc-analyzer/workflows/Code%20Quality/badge.svg)](https://github.com/USERNAME/proc-analyzer/actions/workflows/quality.yml)
 [![codecov](https://codecov.io/gh/USERNAME/proc-analyzer/branch/main/graph/badge.svg)](https://codecov.io/gh/USERNAME/proc-analyzer)
-[![PyPI version](https://badge.fury.io/py/proc-analyzer.svg)](https://badge.fury.io/py/proc-analyzer)
 
 Analyseur statique complet pour code Pro*C (Oracle Embedded SQL), calculant :
 

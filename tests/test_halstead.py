@@ -2,14 +2,14 @@
 Tests pour le module halstead.
 """
 
-import pytest
 import math
-from proc_analyzer.parser import ProCParser
+
 from proc_analyzer.halstead import (
     HalsteadCalculator,
     HalsteadMetrics,
     calculate_halstead,
 )
+from proc_analyzer.parser import ProCParser
 
 
 class TestHalsteadMetrics:

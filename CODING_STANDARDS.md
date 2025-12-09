@@ -1218,4 +1218,4 @@ Ces standards de code visent à maintenir la qualité, la maintenabilité et la 
 
 ---
 
-*Dernière mise à jour : 2024*
+Dernière mise à jour : 2024

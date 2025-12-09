@@ -2,13 +2,12 @@
 Tests pour le module cursors.
 """
 
-import pytest
 from proc_analyzer.cursors import (
+    CursorAnalysisResult,
     CursorAnalyzer,
     CursorInfo,
     CursorIssue,
     CursorIssueType,
-    CursorAnalysisResult,
     analyze_cursors,
 )
 
@@ -100,9 +99,7 @@ EXEC SQL CLOSE outer_cursor;
         result = analyzer.analyze(source)
 
         # Devrait détecter que inner_cursor est ouvert dans une boucle FETCH
-        nested_issues = [
-            i for i in result.issues if i.issue_type == CursorIssueType.NESTED_CURSOR
-        ]
+        nested_issues = [i for i in result.issues if i.issue_type == CursorIssueType.NESTED_CURSOR]
         assert len(nested_issues) >= 1
 
     def test_detect_fetch_without_check(self):
@@ -136,9 +133,6 @@ EXEC SQL CLOSE my_cursor;
         result = analyzer.analyze(source)
 
         # Devrait signaler plus d'OPEN que de CLOSE
-        reopen_issues = [
-            i for i in result.issues if i.issue_type == CursorIssueType.REOPEN_WITHOUT_CLOSE
-        ]
         # Il peut y avoir un warning pour plus d'OPEN que de CLOSE
         assert result.total_issues >= 1
 
@@ -270,9 +264,7 @@ class TestCursorAnalysisResult:
     def test_analysis_result_properties(self):
         """Test des propriétés calculées."""
         result = CursorAnalysisResult()
-        result.cursors.append(
-            CursorInfo(name="c1", declare_line=1, select_statement="SELECT 1")
-        )
+        result.cursors.append(CursorInfo(name="c1", declare_line=1, select_statement="SELECT 1"))
         result.issues.append(
             CursorIssue(
                 cursor_name="c1",
@@ -290,9 +282,7 @@ class TestCursorAnalysisResult:
     def test_analysis_result_to_dict(self):
         """Test de sérialisation complète."""
         result = CursorAnalysisResult()
-        result.cursors.append(
-            CursorInfo(name="c1", declare_line=1, select_statement="SELECT 1")
-        )
+        result.cursors.append(CursorInfo(name="c1", declare_line=1, select_statement="SELECT 1"))
 
         d = result.to_dict()
 

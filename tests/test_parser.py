@@ -2,8 +2,7 @@
 Tests pour le module parser.
 """
 
-import pytest
-from proc_analyzer.parser import ProCParser, FunctionInfo, parse_source
+from proc_analyzer.parser import ProCParser, parse_source
 
 
 class TestProCParser:
@@ -456,5 +455,5 @@ end
 
         func = functions[0]
         assert func.start_line == 2  # Ligne de la déclaration
-        assert func.end_line == 6    # Ligne du end
-        assert func.line_count == 5   # 2 à 6 inclus
+        assert func.end_line == 6  # Ligne du end
+        assert func.line_count == 5  # 2 à 6 inclus

@@ -2,12 +2,11 @@
 Tests pour le module comments.
 """
 
-import pytest
 from proc_analyzer.comments import (
     CommentAnalyzer,
-    TodoItem,
     ModuleInfo,
     ModuleInventory,
+    TodoItem,
     analyze_comments,
 )
 

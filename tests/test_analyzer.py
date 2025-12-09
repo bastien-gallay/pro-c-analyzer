@@ -3,13 +3,11 @@ Tests d'intégration pour le module analyzer.
 """
 
 import json
-import pytest
-from pathlib import Path
+
 from proc_analyzer.analyzer import (
-    ProCAnalyzer,
-    FunctionMetrics,
     FileMetrics,
-    AnalysisReport,
+    FunctionMetrics,
+    ProCAnalyzer,
 )
 
 
@@ -68,19 +66,17 @@ int multiply(int a, int b) {
         """Test que le callback de progression est appelé."""
         (tmp_path / "file1.pc").write_text(simple_proc_source)
         (tmp_path / "file2.pc").write_text(simple_proc_source)
-        
+
         analyzer = ProCAnalyzer()
         callback_calls = []
-        
+
         def progress_callback(filepath: str, current: int, total: int):
             callback_calls.append((filepath, current, total))
-        
+
         report = analyzer.analyze_directory(
-            str(tmp_path), 
-            "*.pc",
-            progress_callback=progress_callback
+            str(tmp_path), "*.pc", progress_callback=progress_callback
         )
-        
+
         assert report is not None
         assert len(report.files) == 2
         assert len(callback_calls) == 2

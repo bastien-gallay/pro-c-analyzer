@@ -2,14 +2,13 @@
 Tests pour le module memory.
 """
 
-import pytest
 from proc_analyzer.memory import (
+    AllocationInfo,
+    MemoryAnalysisResult,
     MemoryAnalyzer,
     MemoryIssue,
     MemoryIssueType,
     MemorySeverity,
-    AllocationInfo,
-    MemoryAnalysisResult,
     analyze_memory,
 )
 
@@ -88,9 +87,7 @@ void process(void) {
         result = analyzer.analyze(source)
 
         # Devrait avoir FREE_NO_NULL
-        no_null_issues = [
-            i for i in result.issues if i.issue_type == MemoryIssueType.FREE_NO_NULL
-        ]
+        no_null_issues = [i for i in result.issues if i.issue_type == MemoryIssueType.FREE_NO_NULL]
         assert len(no_null_issues) >= 1
 
     def test_detect_buffer_overflow_strcpy(self):
@@ -108,8 +105,7 @@ void copy_string(char *input) {
         dangerous_issues = [
             i
             for i in result.issues
-            if i.issue_type
-            in (MemoryIssueType.BUFFER_OVERFLOW, MemoryIssueType.DANGEROUS_FUNCTION)
+            if i.issue_type in (MemoryIssueType.BUFFER_OVERFLOW, MemoryIssueType.DANGEROUS_FUNCTION)
         ]
         assert len(dangerous_issues) >= 1
 
@@ -126,9 +122,7 @@ void format_string(char *input) {
 
         # Devrait détecter sprintf
         dangerous_issues = [
-            i
-            for i in result.issues
-            if i.issue_type == MemoryIssueType.DANGEROUS_FUNCTION
+            i for i in result.issues if i.issue_type == MemoryIssueType.DANGEROUS_FUNCTION
         ]
         assert len(dangerous_issues) >= 1
 
@@ -144,9 +138,7 @@ void read_input(void) {
         result = analyzer.analyze(source)
 
         # gets devrait être CRITICAL / BUFFER_OVERFLOW
-        critical_issues = [
-            i for i in result.issues if i.severity == MemorySeverity.CRITICAL
-        ]
+        critical_issues = [i for i in result.issues if i.severity == MemorySeverity.CRITICAL]
         assert len(critical_issues) >= 1
 
     def test_detect_sizeof_pointer(self):
@@ -161,9 +153,7 @@ void alloc_wrong(void) {
         result = analyzer.analyze(source)
 
         # Devrait détecter sizeof(ptr) sur un pointeur
-        sizeof_issues = [
-            i for i in result.issues if i.issue_type == MemoryIssueType.SIZEOF_POINTER
-        ]
+        sizeof_issues = [i for i in result.issues if i.issue_type == MemoryIssueType.SIZEOF_POINTER]
         assert len(sizeof_issues) >= 1
 
     def test_calloc_detection(self):
@@ -322,9 +312,7 @@ class TestMemoryAnalysisResult:
     def test_analysis_result_to_dict(self):
         """Test de sérialisation complète."""
         result = MemoryAnalysisResult()
-        result.allocations.append(
-            AllocationInfo(variable="ptr", line_number=10, function="malloc")
-        )
+        result.allocations.append(AllocationInfo(variable="ptr", line_number=10, function="malloc"))
 
         d = result.to_dict()
 

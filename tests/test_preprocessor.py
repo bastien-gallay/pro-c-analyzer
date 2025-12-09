@@ -2,8 +2,7 @@
 Tests pour le module preprocessor.
 """
 
-import pytest
-from proc_analyzer.preprocessor import ProCPreprocessor, ExecSqlBlock, preprocess_file
+from proc_analyzer.preprocessor import ExecSqlBlock, preprocess_file
 
 
 class TestProCPreprocessor:

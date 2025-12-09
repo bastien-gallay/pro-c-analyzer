@@ -343,6 +343,91 @@ def get_functions(self):  # Nom déjà explicite
     ...
 ```
 
+### Éviter les commentaires d'algorithme
+
+**Règle importante :** Les commentaires qui décrivent **comment** le code fonctionne (commentaires d'algorithme) doivent être évités. Privilégier les **bons nommages** et l'**extraction de fonctions ou variables** pour rendre le code auto-documenté.
+
+Si vous ressentez le besoin d'ajouter un commentaire pour expliquer un algorithme complexe, c'est souvent un signe que le code doit être refactoré avec des noms plus expressifs ou des fonctions extraites.
+
+**✅ Bon exemple :**
+
+```python
+# Utilisation de noms expressifs et extraction de fonctions
+def calculate_cyclomatic_complexity(self, function: FunctionInfo) -> int:
+    """Calcule la complexité cyclomatique d'une fonction"""
+    complexity = self._base_complexity()
+    
+    for node in self._walk_function_body(function):
+        if self._is_decision_point(node):
+            complexity += self._get_decision_complexity(node)
+    
+    return complexity
+
+def _is_decision_point(self, node: Node) -> bool:
+    """Vérifie si un nœud représente un point de décision"""
+    return node.type in DECISION_NODE_TYPES
+
+def _get_decision_complexity(self, node: Node) -> int:
+    """Retourne la complexité ajoutée par ce point de décision"""
+    if node.type == 'if_statement':
+        return self._calculate_if_complexity(node)
+    elif node.type == 'while_statement':
+        return self._calculate_loop_complexity(node)
+    return 1
+```
+
+**❌ À éviter :**
+
+```python
+# Commentaires d'algorithme qui décrivent le "comment"
+def calculate_cyclomatic_complexity(self, function: FunctionInfo) -> int:
+    """Calcule la complexité cyclomatique d'une fonction"""
+    # On commence avec une complexité de base de 1
+    complexity = 1
+    
+    # On parcourt tous les nœuds du corps de la fonction
+    for node in self._walk_function_body(function):
+        # Si c'est un if, while, for, case, ||, &&, ou ?:, on incrémente
+        if node.type in ['if_statement', 'while_statement', 'for_statement', 
+                         'case_statement', 'logical_or', 'logical_and', 'conditional_expression']:
+            # On ajoute 1 à la complexité pour chaque point de décision
+            complexity += 1
+    
+    return complexity
+```
+
+**✅ Refactorisation avec extraction de variables :**
+
+```python
+# Au lieu de commenter, extraire des variables expressives
+def process_high_complexity_functions(self, threshold: int) -> List[FunctionMetrics]:
+    """Traite les fonctions dépassant le seuil de complexité"""
+    high_complexity_functions = [
+        func for func in self.functions 
+        if func.cyclomatic_complexity > threshold
+    ]
+    
+    return self._generate_report_for(high_complexity_functions)
+```
+
+**❌ À éviter :**
+
+```python
+# Commentaire d'algorithme inutile
+def process_high_complexity_functions(self, threshold: int) -> List[FunctionMetrics]:
+    """Traite les fonctions dépassant le seuil de complexité"""
+    # On filtre les fonctions dont la complexité cyclomatique dépasse le seuil
+    result = []
+    for func in self.functions:
+        if func.cyclomatic_complexity > threshold:
+            result.append(func)
+    
+    # On génère un rapport pour ces fonctions
+    return self._generate_report_for(result)
+```
+
+**Principe clé :** Si un commentaire décrit **ce que fait** le code ou **comment** il le fait, le code doit être refactoré pour être auto-documenté. Les commentaires doivent uniquement expliquer le **pourquoi** (raisons métier, contraintes, décisions de design).
+
 ### Formatage cohérent
 
 Utiliser des outils automatiques pour le formatage (Black) et le linting (Ruff).

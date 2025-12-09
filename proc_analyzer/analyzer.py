@@ -5,7 +5,7 @@ Orchestre le prétraitement, parsing et calcul des métriques
 
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Iterator, Any
+from typing import List, Dict, Optional, Iterator, Any, Callable
 import json
 
 from .preprocessor import ProCPreprocessor, ExecSqlBlock
@@ -505,7 +505,8 @@ class ProCAnalyzer:
         self, 
         directory: str, 
         pattern: str = "*.pc",
-        recursive: bool = True
+        recursive: bool = True,
+        progress_callback: Optional[Callable[[str, int, int], None]] = None
     ) -> AnalysisReport:
         """
         Analyse tous les fichiers Pro*C d'un répertoire.
@@ -514,6 +515,8 @@ class ProCAnalyzer:
             directory: Chemin du répertoire
             pattern: Pattern glob pour les fichiers (défaut: *.pc)
             recursive: Recherche récursive (défaut: True)
+            progress_callback: Callback optionnel appelé pour chaque fichier analysé.
+                              Signature: callback(filepath: str, current: int, total: int)
             
         Returns:
             Rapport d'analyse complet
@@ -532,10 +535,17 @@ class ProCAnalyzer:
         else:
             files = path.glob(pattern)
         
-        for filepath in sorted(files):
-            if filepath.is_file():
-                metrics = self.analyze_file(str(filepath))
-                report.files.append(metrics)
+        # Convertir en liste pour pouvoir compter et trier
+        file_list = sorted([f for f in files if f.is_file()])
+        total_files = len(file_list)
+        
+        for index, filepath in enumerate(file_list, 1):
+            # Appeler le callback de progression si fourni
+            if progress_callback:
+                progress_callback(str(filepath), index, total_files)
+            
+            metrics = self.analyze_file(str(filepath))
+            report.files.append(metrics)
         
         # Ajouter l'inventaire des modules
         if self.enable_todos:

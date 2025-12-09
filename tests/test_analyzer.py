@@ -64,6 +64,32 @@ int multiply(int a, int b) {
         assert report is not None
         assert len(report.files) == 2
 
+    def test_analyze_directory_with_progress_callback(self, tmp_path, simple_proc_source):
+        """Test que le callback de progression est appelé."""
+        (tmp_path / "file1.pc").write_text(simple_proc_source)
+        (tmp_path / "file2.pc").write_text(simple_proc_source)
+        
+        analyzer = ProCAnalyzer()
+        callback_calls = []
+        
+        def progress_callback(filepath: str, current: int, total: int):
+            callback_calls.append((filepath, current, total))
+        
+        report = analyzer.analyze_directory(
+            str(tmp_path), 
+            "*.pc",
+            progress_callback=progress_callback
+        )
+        
+        assert report is not None
+        assert len(report.files) == 2
+        assert len(callback_calls) == 2
+        # Vérifier que le callback a été appelé avec les bons paramètres
+        assert callback_calls[0][1] == 1  # current = 1
+        assert callback_calls[0][2] == 2  # total = 2
+        assert callback_calls[1][1] == 2  # current = 2
+        assert callback_calls[1][2] == 2  # total = 2
+
     def test_disabled_features(self):
         """Test avec features désactivées."""
         source = """

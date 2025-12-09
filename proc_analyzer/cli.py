@@ -2,7 +2,6 @@
 Interface ligne de commande pour l'analyseur Pro*C
 """
 
-import sys
 import csv
 from pathlib import Path
 from typing import Optional
@@ -11,14 +10,84 @@ import click
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
-from rich.text import Text
 from rich import box
+from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeRemainingColumn
 
 from .analyzer import ProCAnalyzer, AnalysisReport, FileMetrics
 from .formatters import JSONFormatter, HTMLFormatter, MarkdownFormatter
 
 
 console = Console()
+
+
+def analyze_with_progress(analyzer: ProCAnalyzer, path: str, pattern: str = "*.pc", recursive: bool = True) -> AnalysisReport:
+    """
+    Analyse un fichier ou répertoire avec affichage de la progression.
+    
+    Args:
+        analyzer: Instance de ProCAnalyzer
+        path: Chemin du fichier ou répertoire à analyser
+        pattern: Pattern glob pour les fichiers (ignoré si path est un fichier)
+        recursive: Recherche récursive (ignoré si path est un fichier)
+        
+    Returns:
+        Rapport d'analyse
+    """
+    path_obj = Path(path)
+    
+    if path_obj.is_file():
+        # Analyse d'un seul fichier (affichage simple)
+        console.print(f"[dim]Analyse du fichier {path_obj.name}...[/dim]")
+        metrics = analyzer.analyze_file(path)
+        report = AnalysisReport(files=[metrics])
+        console.print("[green]✓ Analyse terminée[/green]")
+        return report
+    
+    # Analyse d'un répertoire avec barre de progression
+    # D'abord, compter les fichiers pour initialiser la barre
+    if recursive:
+        files_list = list(path_obj.rglob(pattern))
+    else:
+        files_list = list(path_obj.glob(pattern))
+    total_files = len([f for f in files_list if f.is_file()])
+    
+    if total_files == 0:
+        console.print("[yellow]Aucun fichier trouvé.[/yellow]")
+        return AnalysisReport()
+    
+    console.print(f"[dim]Fichiers trouvés: {total_files}[/dim]")
+    
+    # Créer une barre de progression
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        TextColumn("({task.completed}/{task.total})"),
+        TimeRemainingColumn(),
+        console=console,
+        transient=False,
+    ) as progress:
+        task = progress.add_task("[cyan]Analyse en cours...", total=total_files)
+        
+        # Callback pour mettre à jour la progression
+        def update_progress(filepath: str, current: int, total: int):
+            file_name = Path(filepath).name
+            progress.update(
+                task,
+                completed=current,
+                description=f"[cyan]Analyse: {file_name}"
+            )
+        
+        report = analyzer.analyze_directory(
+            path, 
+            pattern=pattern, 
+            recursive=recursive,
+            progress_callback=update_progress
+        )
+    
+    console.print(f"[green]✓ Analyse terminée: {len(report.files)} fichier(s) analysé(s)[/green]")
+    return report
 
 
 def severity_color(value: int, low: int, medium: int) -> str:
@@ -400,22 +469,14 @@ def analyze(
         enable_cursors=not no_cursors,
         enable_memory=not no_memory,
     )
-    path_obj = Path(path)
-    
     console.print(Panel.fit(
         "[bold]Pro*C Static Analyzer v0.2[/bold]\n"
         "Complexité · TODO/FIXME · Curseurs · Mémoire",
         border_style="blue"
     ))
     
-    if path_obj.is_file():
-        # Analyse d'un seul fichier
-        metrics = analyzer.analyze_file(path)
-        report = AnalysisReport(files=[metrics])
-    else:
-        # Analyse d'un répertoire
-        console.print(f"[dim]Recherche des fichiers {pattern} dans {path}...[/dim]")
-        report = analyzer.analyze_directory(path, pattern=pattern, recursive=recursive)
+    # Utiliser la fonction avec progression
+    report = analyze_with_progress(analyzer, path, pattern, recursive)
     
     if not report.files:
         console.print("[yellow]Aucun fichier trouvé.[/yellow]")
@@ -487,12 +548,7 @@ def todos(path: str):
         enable_memory=False,
     )
     
-    path_obj = Path(path)
-    
-    if path_obj.is_file():
-        report = AnalysisReport(files=[analyzer.analyze_file(path)])
-    else:
-        report = analyzer.analyze_directory(path)
+    report = analyze_with_progress(analyzer, path)
     
     todos = report.get_all_todos()
     
@@ -534,12 +590,7 @@ def security(path: str):
         enable_memory=True,
     )
     
-    path_obj = Path(path)
-    
-    if path_obj.is_file():
-        report = AnalysisReport(files=[analyzer.analyze_file(path)])
-    else:
-        report = analyzer.analyze_directory(path)
+    report = analyze_with_progress(analyzer, path)
     
     console.print(Panel.fit(
         "[bold]🔒 Analyse de sécurité Pro*C[/bold]",
@@ -582,7 +633,7 @@ def inventory(path: str):
         console.print("[yellow]Utilisez un répertoire pour l'inventaire[/yellow]")
         return
     
-    report = analyzer.analyze_directory(path)
+    report = analyze_with_progress(analyzer, path)
     
     console.print(Panel.fit(
         f"[bold]📦 Inventaire du projet[/bold]\n{path}",

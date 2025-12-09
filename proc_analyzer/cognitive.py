@@ -264,7 +264,7 @@ class CognitiveCalculator:
         Returns:
             Liste des opérateurs logiques trouvés (&&, ||)
         """
-        operators = []
+        operators: list[str] = []
 
         if node.type != "binary_expression":
             return operators
@@ -329,9 +329,10 @@ class CognitiveCalculator:
             "nesting_penalty": 0,
         }
 
-        body = self._find_function_body(function.node)
-        if body:
-            self._collect_details(body, 0, details)
+        if function.node:
+            body = self._find_function_body(function.node)
+            if body:
+                self._collect_details(body, 0, details)
 
         details["total"] = self.calculate(function)
         return details

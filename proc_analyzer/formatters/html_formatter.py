@@ -139,7 +139,7 @@ class HTMLFormatter:
             )
 
         # Grouper les TODOs par priorité
-        todos_by_priority = {"high": [], "medium": [], "low": []}
+        todos_by_priority: dict[str, list[dict[str, Any]]] = {"high": [], "medium": [], "low": []}
         if metrics.todos:
             for todo in metrics.todos:
                 priority = todo.get("priority", "low")
@@ -165,7 +165,12 @@ class HTMLFormatter:
                 )
 
         # Grouper les problèmes mémoire par sévérité
-        memory_issues_by_severity = {"critical": [], "error": [], "warning": [], "info": []}
+        memory_issues_by_severity: dict[str, list[dict[str, Any]]] = {
+            "critical": [],
+            "error": [],
+            "warning": [],
+            "info": [],
+        }
         memory_warnings_count = 0
         if metrics.memory_analysis and metrics.memory_analysis.get("issues"):
             for issue in metrics.memory_analysis["issues"]:
@@ -238,7 +243,7 @@ class HTMLFormatter:
             return {"todos": None, "todos_by_priority": {"high": [], "medium": [], "low": []}}
 
         # Grouper par priorité
-        todos_by_priority = {"high": [], "medium": [], "low": []}
+        todos_by_priority: dict[str, list[dict[str, Any]]] = {"high": [], "medium": [], "low": []}
         for filepath, todo in todos:
             priority = todo.get("priority", "low")
             todos_by_priority[priority].append(
@@ -308,7 +313,12 @@ class HTMLFormatter:
             }
 
         # Grouper par sévérité
-        memory_issues_by_severity = {"critical": [], "error": [], "warning": [], "info": []}
+        memory_issues_by_severity: dict[str, list[dict[str, Any]]] = {
+            "critical": [],
+            "error": [],
+            "warning": [],
+            "info": [],
+        }
         for filepath, issue in issues:
             severity = issue.get("severity", "info")
             memory_issues_by_severity[severity].append(

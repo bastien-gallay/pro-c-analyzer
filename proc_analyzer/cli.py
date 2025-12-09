@@ -5,7 +5,7 @@ Interface ligne de commande pour l'analyseur Pro*C
 import csv
 import fnmatch
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import click
 from rich import box
@@ -139,13 +139,14 @@ def analyze_with_progress(
     if use_case_insensitive:
         files_set = find_files_case_insensitive(path_obj, patterns, recursive)
     else:
-        files_set: set[Path] = set()
+        found_files: set[Path] = set()
         for pat in patterns:
             if recursive:
                 files_list = list(path_obj.rglob(pat))
             else:
                 files_list = list(path_obj.glob(pat))
-            files_set.update(f for f in files_list if f.is_file())
+            found_files.update(f for f in files_list if f.is_file())
+        files_set = found_files
 
     # Trier pour avoir un ordre déterministe
     files_list = sorted(files_set)
@@ -352,7 +353,7 @@ def print_todos(report: AnalysisReport) -> None:
     console.print("\n[bold]📝 TODO/FIXME[/bold]")
 
     # Grouper par priorité
-    by_priority = {"high": [], "medium": [], "low": []}
+    by_priority: dict[str, list[tuple[str, dict[str, Any]]]] = {"high": [], "medium": [], "low": []}
     for filepath, todo in todos:
         priority = todo.get("priority", "low")
         by_priority[priority].append((filepath, todo))
@@ -407,7 +408,12 @@ def print_memory_issues(report: AnalysisReport) -> None:
     console.print("\n[bold]🧠 Problèmes de gestion mémoire[/bold]")
 
     # Grouper par sévérité
-    by_severity = {"critical": [], "error": [], "warning": [], "info": []}
+    by_severity: dict[str, list[tuple[str, dict[str, Any]]]] = {
+        "critical": [],
+        "error": [],
+        "warning": [],
+        "info": [],
+    }
     for filepath, issue in issues:
         severity = issue.get("severity", "info")
         by_severity[severity].append((filepath, issue))
@@ -659,7 +665,7 @@ def analyze(
 
     elif output_format == "html":
         if not output:
-            console.print("[red]Erreur: --output est requis pour le format HTML[/red]", err=True)
+            console.print("[red]Erreur: --output est requis pour le format HTML[/red]")
             return
         html_formatter = HTMLFormatter()
         html_formatter.save(report, output)
@@ -667,9 +673,7 @@ def analyze(
 
     elif output_format == "markdown":
         if not output:
-            console.print(
-                "[red]Erreur: --output est requis pour le format Markdown[/red]", err=True
-            )
+            console.print("[red]Erreur: --output est requis pour le format Markdown[/red]")
             return
         markdown_formatter = MarkdownFormatter()
         markdown_formatter.save(report, output)
@@ -725,7 +729,7 @@ def todos(path: str):
     console.print(f"[bold]📝 {len(todos)} TODO/FIXME trouvés[/bold]\n")
 
     # Grouper par fichier
-    by_file = {}
+    by_file: dict[str, list[dict[str, Any]]] = {}
     for filepath, todo in todos:
         if filepath not in by_file:
             by_file[filepath] = []

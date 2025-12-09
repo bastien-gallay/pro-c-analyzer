@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import tree_sitter_c as tsc
-from tree_sitter import Language, Node, Parser
+from tree_sitter import Language, Node, Parser, Tree
 
 
 @dataclass
@@ -57,7 +57,7 @@ class ProCParser:
     def __init__(self) -> None:
         """Initialise le parser avec le langage C."""
         self._parser = Parser(Language(tsc.language()))
-        self._tree: Optional[Node] = None
+        self._tree: Optional[Tree] = None
         self._source: Optional[str] = None
         self._source_bytes: Optional[bytes] = None
 
@@ -80,7 +80,7 @@ class ProCParser:
     @property
     def has_errors(self) -> bool:
         """Vérifie si le parsing a généré des erreurs"""
-        if not self._tree:
+        if not self._tree or not self._tree.root_node:
             return True
         return self._has_error_nodes(self._tree.root_node)
 
@@ -117,9 +117,9 @@ class ProCParser:
         Returns:
             Liste des fonctions trouvées
         """
-        functions = []
+        functions: list[FunctionInfo] = []
 
-        if self._tree:
+        if self._tree and self._tree.root_node:
             self._find_functions(self._tree.root_node, functions)
 
         if self._source:

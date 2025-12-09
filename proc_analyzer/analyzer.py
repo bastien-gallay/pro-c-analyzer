@@ -126,7 +126,7 @@ class FileMetrics:
 
     @property
     def total_sql_blocks(self) -> int:
-        return self.sql_statistics.get("total_blocks", 0)
+        return int(self.sql_statistics.get("total_blocks", 0))
 
     @property
     def todo_count(self) -> int:
@@ -135,13 +135,13 @@ class FileMetrics:
     @property
     def cursor_issues_count(self) -> int:
         if self.cursor_analysis:
-            return self.cursor_analysis.get("total_issues", 0)
+            return int(self.cursor_analysis.get("total_issues", 0))
         return 0
 
     @property
     def memory_issues_count(self) -> int:
         if self.memory_analysis:
-            return self.memory_analysis.get("total_issues", 0)
+            return int(self.memory_analysis.get("total_issues", 0))
         return 0
 
     def to_dict(self) -> dict:

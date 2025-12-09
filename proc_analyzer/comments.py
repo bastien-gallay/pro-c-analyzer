@@ -233,6 +233,9 @@ class CommentAnalyzer:
         if not header_text:
             return
 
+        if not self.module_info:
+            return
+
         self._extract_metadata_from_header(header_text)
 
         if not self.module_info.title:
@@ -274,6 +277,8 @@ class CommentAnalyzer:
         Args:
             header_text: Texte de l'en-tête
         """
+        if not self.module_info:
+            return
         for field_name, patterns in self.HEADER_PATTERNS.items():
             for pattern in patterns:
                 match = pattern.search(header_text)
@@ -290,6 +295,8 @@ class CommentAnalyzer:
         Args:
             header_text: Texte de l'en-tête
         """
+        if not self.module_info:
+            return
         for line in header_text.split("\n"):
             clean = re.sub(r"^\s*\*?\s*", "", line).strip()
             if clean and len(clean) > 3:
@@ -317,13 +324,13 @@ class CommentAnalyzer:
                 continue
 
             if clean and not clean.startswith("*"):
-                if self.module_info.title and clean == self.module_info.title:
+                if self.module_info and self.module_info.title and clean == self.module_info.title:
                     in_desc = True
                     continue
-                if in_desc or not self.module_info.title:
+                if in_desc or (self.module_info and not self.module_info.title):
                     desc_lines.append(clean)
 
-        if desc_lines:
+        if desc_lines and self.module_info:
             self.module_info.description = " ".join(desc_lines[:3])
 
     def _find_includes(self, source: str) -> None:
@@ -333,6 +340,8 @@ class CommentAnalyzer:
         Args:
             source: Code source à analyser
         """
+        if not self.module_info:
+            return
         for match in self.INCLUDE_PATTERN.finditer(source):
             include = match.group(1)
             if include not in self.module_info.includes:
@@ -345,7 +354,7 @@ class CommentAnalyzer:
 
     def get_todos_by_priority(self) -> dict[str, list[TodoItem]]:
         """Regroupe les TODOs par priorité"""
-        by_priority = {"high": [], "medium": [], "low": []}
+        by_priority: dict[str, list[TodoItem]] = {"high": [], "medium": [], "low": []}
         for todo in self.todos:
             by_priority[todo.priority].append(todo)
         return by_priority

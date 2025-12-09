@@ -4,6 +4,7 @@ Formatter Markdown pour les rapports d'analyse.
 
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from ..analyzer import AnalysisReport, FileMetrics
 
@@ -130,7 +131,7 @@ class MarkdownFormatter:
         if metrics.todos:
             parts.append("\n#### 📝 TODO/FIXME\n")
 
-            by_priority = {"high": [], "medium": [], "low": []}
+            by_priority: dict[str, list[dict[str, Any]]] = {"high": [], "medium": [], "low": []}
             for todo in metrics.todos:
                 priority = todo.get("priority", "low")
                 by_priority[priority].append(todo)
@@ -176,7 +177,12 @@ class MarkdownFormatter:
             if issues:
                 parts.append("\n#### 🧠 Problèmes de gestion mémoire\n")
 
-                by_severity = {"critical": [], "error": [], "warning": [], "info": []}
+                by_severity: dict[str, list[dict[str, Any]]] = {
+                    "critical": [],
+                    "error": [],
+                    "warning": [],
+                    "info": [],
+                }
                 for issue in issues:
                     severity = issue.get("severity", "info")
                     by_severity[severity].append(issue)
@@ -211,7 +217,11 @@ class MarkdownFormatter:
 
         parts = ["## 📝 TODO/FIXME"]
 
-        by_priority = {"high": [], "medium": [], "low": []}
+        by_priority: dict[str, list[tuple[str, dict[str, Any]]]] = {
+            "high": [],
+            "medium": [],
+            "low": [],
+        }
         for filepath, todo in todos:
             priority = todo.get("priority", "low")
             by_priority[priority].append((filepath, todo))
@@ -269,7 +279,12 @@ class MarkdownFormatter:
 
         parts = ["## 🧠 Problèmes de gestion mémoire"]
 
-        by_severity = {"critical": [], "error": [], "warning": [], "info": []}
+        by_severity: dict[str, list[tuple[str, dict[str, Any]]]] = {
+            "critical": [],
+            "error": [],
+            "warning": [],
+            "info": [],
+        }
         for filepath, issue in issues:
             severity = issue.get("severity", "info")
             by_severity[severity].append((filepath, issue))

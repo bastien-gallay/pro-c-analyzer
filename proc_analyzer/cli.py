@@ -1,0 +1,608 @@
+"""
+Interface ligne de commande pour l'analyseur Pro*C
+"""
+
+import sys
+import csv
+from pathlib import Path
+from typing import Optional
+
+import click
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+from rich.text import Text
+from rich import box
+
+from .analyzer import ProCAnalyzer, AnalysisReport, FileMetrics
+
+
+console = Console()
+
+
+def severity_color(value: int, low: int, medium: int) -> str:
+    """Retourne une couleur selon la sévérité"""
+    if value <= low:
+        return "green"
+    elif value <= medium:
+        return "yellow"
+    else:
+        return "red"
+
+
+def issue_severity_color(severity: str) -> str:
+    """Couleur selon la sévérité d'un issue"""
+    colors = {
+        'critical': 'red bold',
+        'error': 'red',
+        'warning': 'yellow',
+        'info': 'dim',
+    }
+    return colors.get(severity, 'white')
+
+
+def print_file_report(metrics: FileMetrics, verbose: bool = False) -> None:
+    """Affiche le rapport pour un fichier"""
+    # Titre du fichier
+    console.print(f"\n[bold blue]📄 {metrics.filepath}[/bold blue]")
+    
+    if metrics.parse_errors and metrics.error_message:
+        console.print(f"  [red]⚠ Erreur de parsing: {metrics.error_message}[/red]")
+        return
+    elif metrics.parse_errors:
+        console.print(f"  [yellow]⚠ Parsing partiel (code non standard détecté)[/yellow]")
+    
+    # Module info
+    if metrics.module_info:
+        title = metrics.module_info.get('title', '')
+        desc = metrics.module_info.get('description', '')
+        if title:
+            console.print(f"  [dim]Module: {title}[/dim]")
+        if desc and verbose:
+            console.print(f"  [dim]{desc[:80]}...[/dim]" if len(desc) > 80 else f"  [dim]{desc}[/dim]")
+    
+    # Stats générales
+    console.print(f"  Lignes: {metrics.total_lines} (non vides: {metrics.non_empty_lines})")
+    console.print(f"  Fonctions: {metrics.function_count}")
+    console.print(f"  Blocs SQL: {metrics.total_sql_blocks}")
+    
+    if metrics.sql_statistics.get('by_type'):
+        sql_types = ", ".join(
+            f"{t}: {c}" for t, c in list(metrics.sql_statistics['by_type'].items())[:6]
+        )
+        console.print(f"  Types SQL: {sql_types}")
+    
+    # TODOs
+    if metrics.todos:
+        high_todos = [t for t in metrics.todos if t.get('priority') == 'high']
+        console.print(f"  TODO/FIXME: {len(metrics.todos)} ([red]{len(high_todos)} haute priorité[/red])")
+    
+    # Problèmes curseurs
+    if metrics.cursor_analysis:
+        issues = metrics.cursor_analysis.get('total_issues', 0)
+        nested = metrics.cursor_analysis.get('nested_cursor_count', 0)
+        if issues > 0 or nested > 0:
+            console.print(f"  Curseurs: {metrics.cursor_analysis.get('total_cursors', 0)} ([yellow]{issues} issues, {nested} imbriqués[/yellow])")
+    
+    # Problèmes mémoire
+    if metrics.memory_analysis:
+        mem_issues = metrics.memory_analysis.get('total_issues', 0)
+        critical = metrics.memory_analysis.get('critical_count', 0)
+        if mem_issues > 0:
+            console.print(f"  Mémoire: [red]{mem_issues} problèmes ({critical} critiques)[/red]")
+    
+    if not metrics.functions:
+        console.print("  [dim]Aucune fonction trouvée[/dim]")
+        return
+    
+    # Tableau des fonctions
+    table = Table(box=box.SIMPLE, show_header=True, header_style="bold")
+    table.add_column("Fonction", style="cyan")
+    table.add_column("Lignes", justify="right")
+    table.add_column("Cyclo", justify="right")
+    table.add_column("Cogn", justify="right")
+    table.add_column("SQL", justify="right")
+    
+    if verbose:
+        table.add_column("Halstead Vol", justify="right")
+        table.add_column("Bugs Est.", justify="right")
+    
+    for func in metrics.functions:
+        cyclo_color = severity_color(func.cyclomatic_complexity, 5, 10)
+        cognitive_color = severity_color(func.cognitive_complexity, 8, 15)
+        
+        row = [
+            f"{func.name} (L{func.start_line})",
+            str(func.line_count),
+            f"[{cyclo_color}]{func.cyclomatic_complexity}[/{cyclo_color}]",
+            f"[{cognitive_color}]{func.cognitive_complexity}[/{cognitive_color}]",
+            str(func.sql_blocks_count),
+        ]
+        
+        if verbose and func.halstead:
+            row.append(f"{func.halstead.get('volume', 0):.0f}")
+            row.append(f"{func.halstead.get('bugs_estimate', 0):.2f}")
+        elif verbose:
+            row.extend(['', ''])
+        
+        table.add_row(*row)
+    
+    console.print(table)
+
+
+def print_todos(report: AnalysisReport) -> None:
+    """Affiche les TODOs/FIXME"""
+    todos = report.get_all_todos()
+    if not todos:
+        return
+    
+    console.print("\n[bold]📝 TODO/FIXME[/bold]")
+    
+    # Grouper par priorité
+    by_priority = {'high': [], 'medium': [], 'low': []}
+    for filepath, todo in todos:
+        priority = todo.get('priority', 'low')
+        by_priority[priority].append((filepath, todo))
+    
+    for priority in ['high', 'medium', 'low']:
+        items = by_priority[priority]
+        if not items:
+            continue
+        
+        color = {'high': 'red', 'medium': 'yellow', 'low': 'dim'}[priority]
+        console.print(f"\n  [{color}]{priority.upper()} ({len(items)})[/{color}]")
+        
+        for filepath, todo in items[:10]:  # Limiter à 10 par priorité
+            tag = todo.get('tag', 'TODO')
+            msg = todo.get('message', '')[:60]
+            line = todo.get('line_number', 0)
+            console.print(f"    [{color}]{tag}[/{color}] {Path(filepath).name}:{line} - {msg}")
+        
+        if len(items) > 10:
+            console.print(f"    [dim]... et {len(items) - 10} autres[/dim]")
+
+
+def print_cursor_issues(report: AnalysisReport) -> None:
+    """Affiche les problèmes de curseurs"""
+    issues = report.get_all_cursor_issues()
+    if not issues:
+        return
+    
+    console.print("\n[bold]🔄 Problèmes de curseurs SQL[/bold]")
+    
+    # Trier par sévérité
+    for filepath, issue in issues[:15]:
+        severity = issue.get('severity', 'info')
+        color = issue_severity_color(severity)
+        cursor = issue.get('cursor_name', '?')
+        line = issue.get('line_number', 0)
+        msg = issue.get('message', '')
+        issue_type = issue.get('issue_type', '')
+        
+        console.print(f"  [{color}]{severity.upper()}[/{color}] {Path(filepath).name}:{line}")
+        console.print(f"    Curseur: {cursor} - {msg}")
+    
+    if len(issues) > 15:
+        console.print(f"  [dim]... et {len(issues) - 15} autres problèmes[/dim]")
+
+
+def print_memory_issues(report: AnalysisReport) -> None:
+    """Affiche les problèmes mémoire"""
+    issues = report.get_all_memory_issues()
+    if not issues:
+        return
+    
+    console.print("\n[bold]🧠 Problèmes de gestion mémoire[/bold]")
+    
+    # Grouper par sévérité
+    by_severity = {'critical': [], 'error': [], 'warning': [], 'info': []}
+    for filepath, issue in issues:
+        severity = issue.get('severity', 'info')
+        by_severity[severity].append((filepath, issue))
+    
+    for severity in ['critical', 'error', 'warning']:
+        items = by_severity[severity]
+        if not items:
+            continue
+        
+        color = issue_severity_color(severity)
+        console.print(f"\n  [{color}]{severity.upper()} ({len(items)})[/{color}]")
+        
+        for filepath, issue in items[:10]:
+            line = issue.get('line_number', 0)
+            msg = issue.get('message', '')
+            rec = issue.get('recommendation', '')
+            
+            console.print(f"    [{color}]►[/{color}] {Path(filepath).name}:{line}")
+            console.print(f"      {msg}")
+            if rec:
+                console.print(f"      [dim]→ {rec}[/dim]")
+        
+        if len(items) > 10:
+            console.print(f"    [dim]... et {len(items) - 10} autres[/dim]")
+
+
+def print_module_inventory(report: AnalysisReport) -> None:
+    """Affiche l'inventaire des modules"""
+    if not report.module_inventory:
+        return
+    
+    by_dir = report.module_inventory.get('by_directory', {})
+    if not by_dir:
+        return
+    
+    console.print("\n[bold]📦 Inventaire des modules[/bold]")
+    
+    for directory, modules in sorted(by_dir.items()):
+        console.print(f"\n  [bold cyan]{directory}/[/bold cyan] ({len(modules)} modules)")
+        
+        for mod in modules[:5]:
+            title = mod.get('title', mod.get('filename', '?'))
+            desc = mod.get('description', '')[:50]
+            console.print(f"    • {title}")
+            if desc:
+                console.print(f"      [dim]{desc}...[/dim]" if len(desc) >= 50 else f"      [dim]{desc}[/dim]")
+        
+        if len(modules) > 5:
+            console.print(f"    [dim]... et {len(modules) - 5} autres modules[/dim]")
+
+
+def print_summary(report: AnalysisReport, cyclo_threshold: int, cognitive_threshold: int) -> None:
+    """Affiche le résumé du rapport"""
+    console.print("\n" + "=" * 60)
+    console.print("[bold]📊 RÉSUMÉ[/bold]")
+    console.print("=" * 60)
+    
+    summary_table = Table(box=box.SIMPLE, show_header=False)
+    summary_table.add_column("Métrique", style="bold")
+    summary_table.add_column("Valeur", justify="right")
+    
+    summary_table.add_row("Fichiers analysés", str(report.total_files))
+    summary_table.add_row("Fonctions totales", str(report.total_functions))
+    summary_table.add_row("Lignes totales", str(report.total_lines))
+    summary_table.add_row("Blocs SQL totaux", str(report.total_sql_blocks))
+    summary_table.add_row("", "")
+    summary_table.add_row("Complexité cyclomatique moyenne", f"{report.avg_cyclomatic:.2f}")
+    summary_table.add_row("Complexité cognitive moyenne", f"{report.avg_cognitive:.2f}")
+    summary_table.add_row("", "")
+    summary_table.add_row("TODO/FIXME", str(report.total_todos))
+    summary_table.add_row("Problèmes curseurs", str(report.total_cursor_issues))
+    summary_table.add_row("Problèmes mémoire", str(report.total_memory_issues))
+    
+    console.print(summary_table)
+    
+    # Fonctions à risque
+    high_risk = report.get_high_complexity_functions(cyclo_threshold, cognitive_threshold)
+    
+    if high_risk:
+        console.print(f"\n[bold red]⚠ Fonctions à risque ({len(high_risk)})[/bold red]")
+        console.print(f"  (cyclomatic > {cyclo_threshold} ou cognitive > {cognitive_threshold})")
+        
+        risk_table = Table(box=box.SIMPLE, show_header=True, header_style="bold")
+        risk_table.add_column("Fichier")
+        risk_table.add_column("Fonction")
+        risk_table.add_column("Cyclo", justify="right")
+        risk_table.add_column("Cogn", justify="right")
+        
+        for filepath, func in high_risk[:20]:
+            risk_table.add_row(
+                Path(filepath).name,
+                func.name,
+                f"[red]{func.cyclomatic_complexity}[/red]" if func.cyclomatic_complexity > cyclo_threshold else str(func.cyclomatic_complexity),
+                f"[red]{func.cognitive_complexity}[/red]" if func.cognitive_complexity > cognitive_threshold else str(func.cognitive_complexity),
+            )
+        
+        if len(high_risk) > 20:
+            console.print(f"  [dim]... et {len(high_risk) - 20} autres fonctions[/dim]")
+        
+        console.print(risk_table)
+    else:
+        console.print(f"\n[green]✓ Aucune fonction ne dépasse les seuils de complexité[/green]")
+
+
+def save_json(report: AnalysisReport, output: str) -> None:
+    """Sauvegarde le rapport en JSON"""
+    Path(output).write_text(report.to_json(), encoding='utf-8')
+    console.print(f"[green]✓ Rapport JSON sauvegardé: {output}[/green]")
+
+
+def save_csv(report: AnalysisReport, output: str) -> None:
+    """Sauvegarde le rapport en CSV"""
+    with open(output, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        for row in report.to_csv_rows():
+            writer.writerow(row)
+    console.print(f"[green]✓ Rapport CSV sauvegardé: {output}[/green]")
+
+
+@click.group()
+@click.version_option(version="0.2.0")
+def cli():
+    """
+    Pro*C Static Analyzer - Analyse de complexité pour code Pro*C
+    
+    Calcule la complexité cyclomatique, cognitive, Halstead,
+    détecte les TODO/FIXME, curseurs imbriqués et problèmes mémoire.
+    """
+    pass
+
+
+@cli.command()
+@click.argument('path', type=click.Path(exists=True))
+@click.option('--pattern', '-p', default='*.pc', help='Pattern glob pour les fichiers (défaut: *.pc)')
+@click.option('--format', '-f', 'output_format', type=click.Choice(['text', 'json', 'csv']), default='text', help='Format de sortie')
+@click.option('--output', '-o', type=click.Path(), help='Fichier de sortie (pour json/csv)')
+@click.option('--threshold-cyclo', '-tc', default=10, help='Seuil complexité cyclomatique (défaut: 10)')
+@click.option('--threshold-cognitive', '-tg', default=15, help='Seuil complexité cognitive (défaut: 15)')
+@click.option('--recursive/--no-recursive', '-r/-R', default=True, help='Recherche récursive (défaut: oui)')
+@click.option('--verbose', '-v', is_flag=True, help='Mode verbeux (Halstead, détails)')
+@click.option('--no-halstead', is_flag=True, help='Désactiver les métriques Halstead')
+@click.option('--no-todos', is_flag=True, help='Désactiver la détection TODO/FIXME')
+@click.option('--no-cursors', is_flag=True, help='Désactiver l\'analyse des curseurs')
+@click.option('--no-memory', is_flag=True, help='Désactiver l\'analyse mémoire')
+def analyze(
+    path: str,
+    pattern: str,
+    output_format: str,
+    output: Optional[str],
+    threshold_cyclo: int,
+    threshold_cognitive: int,
+    recursive: bool,
+    verbose: bool,
+    no_halstead: bool,
+    no_todos: bool,
+    no_cursors: bool,
+    no_memory: bool,
+):
+    """
+    Analyse les fichiers Pro*C.
+    
+    PATH peut être un fichier ou un répertoire.
+    
+    Exemples:
+    
+        proc-analyzer analyze program.pc
+        
+        proc-analyzer analyze ./src --pattern "*.pc"
+        
+        proc-analyzer analyze ./src -f json -o report.json
+        
+        proc-analyzer analyze ./src -v  # Mode verbeux avec Halstead
+    """
+    analyzer = ProCAnalyzer(
+        enable_halstead=not no_halstead,
+        enable_todos=not no_todos,
+        enable_cursors=not no_cursors,
+        enable_memory=not no_memory,
+    )
+    path_obj = Path(path)
+    
+    console.print(Panel.fit(
+        "[bold]Pro*C Static Analyzer v0.2[/bold]\n"
+        "Complexité · TODO/FIXME · Curseurs · Mémoire",
+        border_style="blue"
+    ))
+    
+    if path_obj.is_file():
+        # Analyse d'un seul fichier
+        metrics = analyzer.analyze_file(path)
+        report = AnalysisReport(files=[metrics])
+    else:
+        # Analyse d'un répertoire
+        console.print(f"[dim]Recherche des fichiers {pattern} dans {path}...[/dim]")
+        report = analyzer.analyze_directory(path, pattern=pattern, recursive=recursive)
+    
+    if not report.files:
+        console.print("[yellow]Aucun fichier trouvé.[/yellow]")
+        return
+    
+    # Sortie selon le format demandé
+    if output_format == 'json':
+        if output:
+            save_json(report, output)
+        else:
+            console.print(report.to_json())
+    
+    elif output_format == 'csv':
+        if output:
+            save_csv(report, output)
+        else:
+            for row in report.to_csv_rows():
+                console.print(','.join(row))
+    
+    else:  # text
+        for file_metrics in report.files:
+            print_file_report(file_metrics, verbose)
+        
+        # Sections supplémentaires en mode verbeux
+        if verbose:
+            print_todos(report)
+            print_cursor_issues(report)
+            print_memory_issues(report)
+            print_module_inventory(report)
+        
+        if len(report.files) > 1 or report.total_functions > 0:
+            print_summary(report, threshold_cyclo, threshold_cognitive)
+        
+        if output:
+            save_json(report, output)
+
+
+@cli.command()
+@click.argument('path', type=click.Path(exists=True))
+def todos(path: str):
+    """
+    Liste tous les TODO/FIXME d'un projet.
+    """
+    analyzer = ProCAnalyzer(
+        enable_halstead=False,
+        enable_todos=True,
+        enable_cursors=False,
+        enable_memory=False,
+    )
+    
+    path_obj = Path(path)
+    
+    if path_obj.is_file():
+        report = AnalysisReport(files=[analyzer.analyze_file(path)])
+    else:
+        report = analyzer.analyze_directory(path)
+    
+    todos = report.get_all_todos()
+    
+    if not todos:
+        console.print("[green]✓ Aucun TODO/FIXME trouvé[/green]")
+        return
+    
+    console.print(f"[bold]📝 {len(todos)} TODO/FIXME trouvés[/bold]\n")
+    
+    # Grouper par fichier
+    by_file = {}
+    for filepath, todo in todos:
+        if filepath not in by_file:
+            by_file[filepath] = []
+        by_file[filepath].append(todo)
+    
+    for filepath, file_todos in by_file.items():
+        console.print(f"[bold blue]{Path(filepath).name}[/bold blue]")
+        for todo in file_todos:
+            tag = todo.get('tag', 'TODO')
+            priority = todo.get('priority', 'low')
+            msg = todo.get('message', '')
+            line = todo.get('line_number', 0)
+            
+            color = {'high': 'red', 'medium': 'yellow', 'low': 'dim'}[priority]
+            console.print(f"  [{color}]{tag}[/{color}] L{line}: {msg}")
+
+
+@cli.command()
+@click.argument('path', type=click.Path(exists=True))
+def security(path: str):
+    """
+    Analyse de sécurité: mémoire et curseurs dangereux.
+    """
+    analyzer = ProCAnalyzer(
+        enable_halstead=False,
+        enable_todos=False,
+        enable_cursors=True,
+        enable_memory=True,
+    )
+    
+    path_obj = Path(path)
+    
+    if path_obj.is_file():
+        report = AnalysisReport(files=[analyzer.analyze_file(path)])
+    else:
+        report = analyzer.analyze_directory(path)
+    
+    console.print(Panel.fit(
+        "[bold]🔒 Analyse de sécurité Pro*C[/bold]",
+        border_style="red"
+    ))
+    
+    # Problèmes mémoire
+    print_memory_issues(report)
+    
+    # Problèmes curseurs
+    print_cursor_issues(report)
+    
+    # Résumé
+    total_issues = report.total_memory_issues + report.total_cursor_issues
+    
+    if total_issues == 0:
+        console.print("\n[green]✓ Aucun problème de sécurité détecté[/green]")
+    else:
+        console.print(f"\n[bold red]⚠ {total_issues} problèmes de sécurité détectés[/bold red]")
+        console.print(f"  - Mémoire: {report.total_memory_issues}")
+        console.print(f"  - Curseurs: {report.total_cursor_issues}")
+
+
+@cli.command()
+@click.argument('path', type=click.Path(exists=True))
+def inventory(path: str):
+    """
+    Affiche l'inventaire des modules du projet.
+    """
+    analyzer = ProCAnalyzer(
+        enable_halstead=False,
+        enable_todos=True,
+        enable_cursors=False,
+        enable_memory=False,
+    )
+    
+    path_obj = Path(path)
+    
+    if path_obj.is_file():
+        console.print("[yellow]Utilisez un répertoire pour l'inventaire[/yellow]")
+        return
+    
+    report = analyzer.analyze_directory(path)
+    
+    console.print(Panel.fit(
+        f"[bold]📦 Inventaire du projet[/bold]\n{path}",
+        border_style="blue"
+    ))
+    
+    if not report.module_inventory:
+        console.print("[yellow]Aucun module trouvé[/yellow]")
+        return
+    
+    by_dir = report.module_inventory.get('by_directory', {})
+    
+    for directory, modules in sorted(by_dir.items()):
+        console.print(f"\n[bold cyan]📁 {directory}/[/bold cyan]")
+        
+        table = Table(box=box.SIMPLE, show_header=True, header_style="bold")
+        table.add_column("Fichier")
+        table.add_column("Titre/Description")
+        table.add_column("Includes")
+        
+        for mod in modules:
+            filename = mod.get('filename', '?')
+            title = mod.get('title', '')
+            desc = mod.get('description', '')[:40]
+            includes = len(mod.get('includes', [])) + len(mod.get('exec_sql_includes', []))
+            
+            display = title or desc or filename
+            if len(display) > 50:
+                display = display[:47] + "..."
+            
+            table.add_row(filename, display, str(includes))
+        
+        console.print(table)
+    
+    # Stats
+    summary = report.module_inventory.get('summary', {})
+    console.print(f"\n[bold]Total: {summary.get('total_modules', 0)} modules dans {len(by_dir)} répertoires[/bold]")
+
+
+@cli.command()
+@click.argument('path', type=click.Path(exists=True))
+def preprocess(path: str):
+    """
+    Affiche le code prétraité (sans les blocs EXEC SQL).
+    
+    Utile pour debugger le parsing.
+    """
+    from .preprocessor import preprocess_file
+    
+    processed, blocks = preprocess_file(path)
+    
+    console.print(f"[bold]Blocs EXEC SQL trouvés: {len(blocks)}[/bold]")
+    for block in blocks[:20]:
+        console.print(f"  L{block.line_number}: {block.sql_type}")
+    
+    if len(blocks) > 20:
+        console.print(f"  ... et {len(blocks) - 20} autres")
+    
+    console.print("\n[bold]Code prétraité:[/bold]")
+    console.print(processed)
+
+
+def main():
+    """Point d'entrée principal"""
+    cli()
+
+
+if __name__ == '__main__':
+    main()

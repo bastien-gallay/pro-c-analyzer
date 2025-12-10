@@ -1,11 +1,34 @@
 {% if files %}
 <h2>Fichiers analysés</h2>
-<div class="file-filter">
-    <input type="text" id="file-filter-input" placeholder="Filtrer par nom de fichier...">
-    <button id="file-filter-reset">Tout afficher</button>
+<div class="file-controls">
+    <div class="file-filter">
+        <input type="text" id="file-filter-input" placeholder="Filtrer par nom de fichier...">
+        <button id="file-filter-reset">Tout afficher</button>
+    </div>
+    <div class="file-sort">
+        <label for="file-sort-select">Trier par:</label>
+        <select id="file-sort-select">
+            <option value="filename">Nom de fichier</option>
+            <option value="total-lines">Nombre total de lignes</option>
+            <option value="non-empty-lines">Lignes non vides</option>
+            <option value="avg-cyclomatic">Complexité cyclomatique moyenne</option>
+            <option value="avg-cognitive">Complexité cognitive moyenne</option>
+            <option value="function-count">Nombre de fonctions</option>
+            <option value="total-sql-blocks">Nombre de blocs SQL</option>
+            <option value="todos-count">Nombre de TODOs</option>
+            <option value="cursor-issues-count">Problèmes de curseurs</option>
+            <option value="memory-warnings-count">Problèmes mémoire</option>
+        </select>
+        <button id="file-sort-order" title="Basculer l'ordre de tri">
+            <span id="file-sort-order-icon">↑</span>
+            <span id="file-sort-order-text">Croissant</span>
+        </button>
+    </div>
 </div>
+<div id="files-container">
 {% for file_data in files %}
 {% include 'file_section.html' %}
 {% endfor %}
+</div>
 {% endif %}
 

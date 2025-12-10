@@ -222,11 +222,78 @@ tr:hover {
     border-radius: 4px;
 }
 
-.file-filter {
+.file-controls {
     margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.file-filter {
     display: flex;
     gap: 10px;
     align-items: center;
+}
+
+.file-sort {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 10px;
+    background: #f9fafb;
+    border-radius: 6px;
+    border: 1px solid #e5e7eb;
+}
+
+.file-sort label {
+    font-weight: 500;
+    color: #374151;
+    white-space: nowrap;
+}
+
+.file-sort select {
+    flex: 1;
+    padding: 8px 12px;
+    border: 2px solid #e5e7eb;
+    border-radius: 6px;
+    font-size: 0.95em;
+    background: white;
+    color: #374151;
+    cursor: pointer;
+    min-width: 200px;
+}
+
+.file-sort select:focus {
+    outline: none;
+    border-color: #2563eb;
+}
+
+.file-sort button {
+    padding: 8px 16px;
+    background: #2563eb;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    transition: background 0.2s;
+}
+
+.file-sort button:hover {
+    background: #1e40af;
+}
+
+.file-sort button #file-sort-order-icon {
+    font-size: 1.1em;
+    font-weight: bold;
+}
+
+.file-sort button #file-sort-order-text {
+    font-size: 0.9em;
 }
 
 .file-filter input {

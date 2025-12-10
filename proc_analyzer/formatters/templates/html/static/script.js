@@ -44,6 +44,10 @@ document.querySelectorAll('th').forEach(header => {
 let currentFilter = '';
 let currentFilterType = '';
 
+// File sorting functionality
+let currentSortCriteria = 'filename';
+let currentSortAscending = true;
+
 function filterFiles(filterText) {
     currentFilter = filterText.toLowerCase().trim();
     currentFilterType = '';
@@ -150,6 +154,7 @@ if (resetButton) {
         if (filterInput) {
             filterInput.value = '';
         }
+        currentFilter = '';
         currentFilterType = '';
         document.querySelectorAll('.summary-card').forEach(card => {
             card.classList.remove('active');
@@ -161,6 +166,8 @@ if (resetButton) {
                 title.classList.remove('filter-active');
             }
         });
+        // Reapply sorting after reset
+        sortFiles(currentSortCriteria, currentSortAscending);
     });
 }
 
@@ -194,5 +201,138 @@ document.querySelectorAll('.summary-card.filterable').forEach(card => {
             filterFilesByType(filterType);
         }
     });
+});
+
+// File sorting functionality
+function sortFiles(criteria, ascending) {
+    // Get all visible file sections (respecting current filter)
+    const fileSections = Array.from(document.querySelectorAll('.file-section'))
+        .filter(section => section.style.display !== 'none');
+    
+    if (fileSections.length === 0) {
+        return;
+    }
+    
+    // Get the parent container (files-container or direct parent)
+    const filesContainer = document.getElementById('files-container');
+    const parent = filesContainer || (fileSections[0] ? fileSections[0].parentElement : null);
+    
+    if (!parent) {
+        return;
+    }
+    
+    // Sort the file sections
+    fileSections.sort((a, b) => {
+        let aValue, bValue;
+        
+        switch(criteria) {
+            case 'filename':
+                aValue = (a.dataset.filename || '').toLowerCase();
+                bValue = (b.dataset.filename || '').toLowerCase();
+                return ascending 
+                    ? aValue.localeCompare(bValue)
+                    : bValue.localeCompare(aValue);
+            
+            case 'total-lines':
+                aValue = parseInt(a.dataset.totalLines || '0', 10);
+                bValue = parseInt(b.dataset.totalLines || '0', 10);
+                return ascending ? aValue - bValue : bValue - aValue;
+            
+            case 'non-empty-lines':
+                aValue = parseInt(a.dataset.nonEmptyLines || '0', 10);
+                bValue = parseInt(b.dataset.nonEmptyLines || '0', 10);
+                return ascending ? aValue - bValue : bValue - aValue;
+            
+            case 'avg-cyclomatic':
+                aValue = parseFloat(a.dataset.avgCyclomatic || '0');
+                bValue = parseFloat(b.dataset.avgCyclomatic || '0');
+                return ascending ? aValue - bValue : bValue - aValue;
+            
+            case 'avg-cognitive':
+                aValue = parseFloat(a.dataset.avgCognitive || '0');
+                bValue = parseFloat(b.dataset.avgCognitive || '0');
+                return ascending ? aValue - bValue : bValue - aValue;
+            
+            case 'function-count':
+                aValue = parseInt(a.dataset.functionCount || '0', 10);
+                bValue = parseInt(b.dataset.functionCount || '0', 10);
+                return ascending ? aValue - bValue : bValue - aValue;
+            
+            case 'total-sql-blocks':
+                aValue = parseInt(a.dataset.totalSqlBlocks || '0', 10);
+                bValue = parseInt(b.dataset.totalSqlBlocks || '0', 10);
+                return ascending ? aValue - bValue : bValue - aValue;
+            
+            case 'todos-count':
+                aValue = parseInt(a.dataset.todosCount || '0', 10);
+                bValue = parseInt(b.dataset.todosCount || '0', 10);
+                return ascending ? aValue - bValue : bValue - aValue;
+            
+            case 'cursor-issues-count':
+                aValue = parseInt(a.dataset.cursorIssuesCount || '0', 10);
+                bValue = parseInt(b.dataset.cursorIssuesCount || '0', 10);
+                return ascending ? aValue - bValue : bValue - aValue;
+            
+            case 'memory-warnings-count':
+                aValue = parseInt(a.dataset.memoryWarningsCount || '0', 10);
+                bValue = parseInt(b.dataset.memoryWarningsCount || '0', 10);
+                return ascending ? aValue - bValue : bValue - aValue;
+            
+            default:
+                return 0;
+        }
+    });
+    
+    // Reorder elements in the DOM
+    fileSections.forEach(section => {
+        parent.appendChild(section);
+    });
+}
+
+// Sort select handler
+const sortSelect = document.getElementById('file-sort-select');
+if (sortSelect) {
+    sortSelect.addEventListener('change', function() {
+        currentSortCriteria = this.value;
+        sortFiles(currentSortCriteria, currentSortAscending);
+    });
+}
+
+// Sort order button handler
+const sortOrderButton = document.getElementById('file-sort-order');
+if (sortOrderButton) {
+    sortOrderButton.addEventListener('click', function() {
+        currentSortAscending = !currentSortAscending;
+        const icon = document.getElementById('file-sort-order-icon');
+        const text = document.getElementById('file-sort-order-text');
+        if (icon) {
+            icon.textContent = currentSortAscending ? '↑' : '↓';
+        }
+        if (text) {
+            text.textContent = currentSortAscending ? 'Croissant' : 'Décroissant';
+        }
+        sortFiles(currentSortCriteria, currentSortAscending);
+    });
+}
+
+// Apply sorting when filtering changes
+const originalFilterFiles = filterFiles;
+filterFiles = function(filterText) {
+    originalFilterFiles(filterText);
+    sortFiles(currentSortCriteria, currentSortAscending);
+};
+
+const originalFilterFilesByType = filterFilesByType;
+filterFilesByType = function(filterType) {
+    originalFilterFilesByType(filterType);
+    sortFiles(currentSortCriteria, currentSortAscending);
+};
+
+// Apply initial sort on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Small delay to ensure all elements are rendered
+    setTimeout(() => {
+        sortFiles(currentSortCriteria, currentSortAscending);
+    }, 100);
 });
 

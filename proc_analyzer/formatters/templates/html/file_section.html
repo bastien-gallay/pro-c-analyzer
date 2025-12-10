@@ -3,7 +3,14 @@
     data-has-cursor-issues="{{ file_data.has_cursor_issues }}" 
     data-has-memory-issues="{{ file_data.has_memory_issues }}" 
     data-avg-cyclomatic="{{ file_data.avg_cyclomatic }}" 
-    data-avg-cognitive="{{ file_data.avg_cognitive }}">
+    data-avg-cognitive="{{ file_data.avg_cognitive }}"
+    data-total-lines="{{ file_data.total_lines }}"
+    data-non-empty-lines="{{ file_data.non_empty_lines }}"
+    data-function-count="{{ file_data.function_count }}"
+    data-total-sql-blocks="{{ file_data.total_sql_blocks }}"
+    data-todos-count="{{ file_data.todos_count }}"
+    data-cursor-issues-count="{{ file_data.cursor_issues_count }}"
+    data-memory-warnings-count="{{ file_data.memory_warnings_count }}">
     <div class="file-header">
         <div class="file-header-left">
         <div class="file-title" title="Cliquer pour filtrer par ce fichier">📄 {{ file_data.filename|e }}</div>
